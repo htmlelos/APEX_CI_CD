@@ -1,0 +1,63 @@
+---
+- # ====== Breadcrumb: Breadcrumb ==============================
+  id: 33760834440704595
+  identification: 
+    name: Breadcrumb
+
+  entries: 
+  - # ====== Entry: Home =========================================
+    id: 33761098680704596
+    identification: 
+      name: Home
+      page-number: 1
+
+    execution: 
+      sequence: 10
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:1:&APP_SESSION.::&DEBUG.:::'
+        page: 1 # Home
+
+  - # ====== Entry: FIRST_PAGE ===================================
+    id: 34065601053724300
+    identification: 
+      name: FIRST_PAGE
+      page-number: 2
+
+    execution: 
+      sequence: 10
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:2:&APP_SESSION.::&DEBUG.:::'
+        page: 2 # GREETING
+
+  - # ====== Entry: LIST_PAGE ====================================
+    id: 34348821325513541
+    identification: 
+      name: LIST_PAGE
+      page-number: 3
+
+    execution: 
+      sequence: 10
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:3:&APP_SESSION.::&DEBUG.:::'
+        page: 3 # LIST_PAGE
+
+  - # ====== Entry: DETAIL_PAGE ==================================
+    id: 34350558917941866
+    identification: 
+      name: DETAIL_PAGE
+      page-number: 4
+
+    execution: 
+      sequence: 10
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:4:&APP_SESSION.::&DEBUG.:::'
+        page: 4 # DETAIL_PAGE
+
