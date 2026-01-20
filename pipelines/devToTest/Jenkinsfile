@@ -1,0 +1,236 @@
+pipeline {
+    agent any
+    
+    environment {
+        // Configuraciones del contenedor de Oracle
+        ORACLE_CONTAINER = "oracle-db"
+        SQLCL_PATH       = "/opt/sqlcl/bin/sql"
+        DB_SERVICE       = "FREEPDB1"
+        REPO_URL         = "https://github.com/htmlelos/APEX_CI_CD.git"
+        DB_CONN_STR      = "localhost:1522/${DB_SERVICE}"
+        
+        // Configuración de SonarQube
+        SONAR_SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+        SONAR_PROJECT_KEY = "apex-project-${env.BRANCH_NAME}"
+        SONAR_PROJECT_NAME = "APEX Project - ${env.BRANCH_NAME}"
+    }
+    
+    // Trigger automático cuando hay merge a test
+    triggers {
+        githubPush()
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            when {
+                branch 'test'
+            }
+            steps {
+                script {
+                    echo "=== Análisis de Código con SonarQube y Zap ==="
+                    
+                    // Usar withSonarQubeEnv para configurar el entorno
+                    withSonarQubeEnv('SonarQube-Server') {
+                        sh '''
+                            # Crear directorio para reportes si no existe
+                            mkdir -p sonar-reports
+                            
+                            # Ejecutar SonarScanner con Zap plugin para PL/SQL
+                            ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
+                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
+                                -Dsonar.projectVersion=${BUILD_NUMBER} \
+                                -Dsonar.sources=. \
+                                -Dsonar.inclusions=**/*.sql,**/*.pks,**/*.pkb,**/*.fnc,**/*.prc,**/*.trg \
+                                -Dsonar.exclusions=**/node_modules/**,**/target/**,**/artifact/** \
+                                -Dsonar.plsql.file.suffixes=sql,pks,pkb,fnc,prc,trg \
+                                -Dsonar.language=plsql \
+                                -Dsonar.sourceEncoding=UTF-8 \
+                                -Dsonar.working.directory=${WORKSPACE}/sonar-reports
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Quality Gate') {
+            when {
+                branch 'test'
+            }
+            steps {
+                script {
+                    echo "=== Esperando resultado de Quality Gate ==="
+                    
+                    // Esperar el resultado del Quality Gate
+                    timeout(time: 10, unit: 'MINUTES') {
+                        def qg = waitForQualityGate()
+                        
+                        if (qg.status != 'OK') {
+                            echo "Quality Gate FAILED: ${qg.status}"
+                            echo "Detalles disponibles en: ${env.SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}"
+                            
+                            // Puedes decidir si fallas el build o solo adviertes
+                            // Opción 1: Fallar el build
+                            error "El análisis de calidad no pasó los umbrales definidos"
+                            
+                            // Opción 2: Solo advertir (comentar error y descomentar siguiente línea)
+                            // unstable("Quality Gate failed pero se continúa el despliegue")
+                        } else {
+                            echo "Quality Gate PASSED: El código cumple con los estándares de calidad"
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Stage and Generate Artifact') {
+            when {
+                branch 'test'
+            }
+            environment {
+                DEVDB = credentials('apex-dev-credential')
+            }
+            steps {
+                sh '''
+                    echo "=== Generando Artefacto usando contenedor Oracle ==="
+                    
+                    # 1. Sincronizar el código del Workspace de Jenkins al contenedor de Oracle
+                    docker exec -u root ${ORACLE_CONTAINER} mkdir -p /tmp/apex_project
+                    docker cp ${WORKSPACE}/. ${ORACLE_CONTAINER}:/tmp/apex_project/
+
+                    # 2. Ejecutar SQLcl dentro del contenedor de Oracle
+                    docker exec ${ORACLE_CONTAINER} bash -c "
+                        cd /tmp/apex_project
+                        ${SQLCL_PATH} ${DEVDB_USR}/${DEVDB_PSW}@${DB_CONN_STR} <<EOF
+                        project gen-artifact -name app-test -version ${BUILD_NUMBER}
+                        exit
+EOF
+                    "
+                    
+                    # 3. Traer el artefacto generado de vuelta a Jenkins para archivarlo
+                    mkdir -p ${WORKSPACE}/artifact
+                    docker cp ${ORACLE_CONTAINER}:/tmp/apex_project/artifact/. ${WORKSPACE}/artifact/
+                '''
+            }
+        }
+        
+        stage('Deploy to TEST') {
+            when {
+                branch 'test'
+            }
+            environment {
+                TESTDB = credentials('apex-test-credential')
+            }
+            steps {
+                sh '''
+                    echo "=== Desplegando a TEST ==="
+                    
+                    # Identificar el archivo generado
+                    ARTIFACT_FILE=$(find artifact -name "*.zip" | head -1)
+                    echo "Archivo encontrado: ${ARTIFACT_FILE}"
+
+                    # 1. Copiar el zip al contenedor de Oracle
+                    docker cp ${WORKSPACE}/${ARTIFACT_FILE} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip
+
+                    # 2. Ejecutar el despliegue
+                    docker exec ${ORACLE_CONTAINER} bash -c "
+                        cd /tmp/apex_project
+                        ${SQLCL_PATH} ${TESTDB_USR}/${TESTDB_PSW}@${DB_CONN_STR} <<EOF
+                        DEFINE DEFAULTS_FILE=dist/utils/properties/test.properties
+                        project deploy -file /tmp/deploy_app.zip
+                        exit
+EOF
+                    "
+                '''
+            }
+        }
+        
+        stage('Verify Deployment') {
+            when {
+                branch 'test'
+            }
+            environment {
+                TESTDB = credentials('apex-test-credential')
+            }
+            steps {
+                sh '''
+                    echo "=== Verificando Aplicación en APEX ==="
+                    docker exec ${ORACLE_CONTAINER} bash -c "
+                        ${SQLCL_PATH} -S ${TESTDB_USR}/${TESTDB_PSW}@${DB_CONN_STR} <<EOF
+                        SET PAGESIZE 50
+                        SET FEEDBACK OFF
+                        COLUMN application_id FORMAT 999999
+                        COLUMN alias FORMAT A20
+                        COLUMN workspace FORMAT A20
+                        
+                        SELECT application_id, alias, workspace 
+                        FROM apex_applications 
+                        WHERE workspace = 'TEST_WRKSPC_CICD';
+                        exit
+EOF
+                    "
+                '''
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo 'Deploy a TEST completado exitosamente'
+            emailext(
+                subject: "✅ Deploy Exitoso - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                    El deploy a TEST se completó exitosamente.
+                    
+                    Job: ${env.JOB_NAME}
+                    Build: ${env.BUILD_NUMBER}
+                    Quality Gate: PASSED
+                    SonarQube Report: ${env.SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}
+                """,
+                to: "${env.CHANGE_AUTHOR_EMAIL}",
+                mimeType: 'text/plain'
+            )
+        }
+        failure {
+            echo 'Error en deploy a TEST'
+            emailext(
+                subject: "❌ Deploy Fallido - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                    El deploy a TEST ha fallado.
+                    
+                    Job: ${env.JOB_NAME}
+                    Build: ${env.BUILD_NUMBER}
+                    
+                    Revise los logs para más detalles.
+                """,
+                to: "${env.CHANGE_AUTHOR_EMAIL}",
+                mimeType: 'text/plain'
+            )
+        }
+        always {
+            // Limpiar archivos temporales en el contenedor de Oracle
+            sh 'docker exec ${ORACLE_CONTAINER} rm -rf /tmp/apex_project /tmp/deploy_app.zip || true'
+            archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
+            
+            // Publicar métricas de SonarQube en Jenkins
+            script {
+                if (fileExists('sonar-reports')) {
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'sonar-reports',
+                        reportFiles: 'report-task.txt',
+                        reportName: 'SonarQube Report'
+                    ])
+                }
+            }
+        }
+    }
+}
