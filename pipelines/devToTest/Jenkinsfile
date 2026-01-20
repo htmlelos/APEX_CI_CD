@@ -1,3 +1,12 @@
+// NOTA: Este pipeline está configurado con 'agent any'.
+// Esto significa que se ejecutará en cualquier agente de Jenkins disponible.
+// Sin embargo, las etapas del pipeline ejecutan comandos 'docker'.
+// Por lo tanto, el agente de Jenkins que ejecute este job DEBE tener
+// Docker instalado y el demonio de Docker debe estar en ejecución y accesible.
+// El error original 'Invalid agent type "docker"' ocurría porque la declaración
+// del agente era 'agent { docker { ... } }' y el plugin de Docker no estaba configurado en Jenkins.
+// La solución es usar 'agent any' y asegurar que el agente tenga Docker disponible.
+
 pipeline {
     agent any
     
@@ -29,7 +38,7 @@ pipeline {
         
         stage('SonarQube Analysis') {
             when {
-                branch 'test'
+                branch 'develop'
             }
             steps {
                 script {
@@ -46,7 +55,7 @@ pipeline {
                                 -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                                 -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
                                 -Dsonar.projectVersion=${BUILD_NUMBER} \
-                                -Dsonar.sources=. \
+                                -Dsonar.sources=.
                                 -Dsonar.inclusions=**/*.sql,**/*.pks,**/*.pkb,**/*.fnc,**/*.prc,**/*.trg \
                                 -Dsonar.exclusions=**/node_modules/**,**/target/**,**/artifact/** \
                                 -Dsonar.plsql.file.suffixes=sql,pks,pkb,fnc,prc,trg \
@@ -67,7 +76,9 @@ pipeline {
                 script {
                     echo "=== Esperando resultado de Quality Gate ==="
                     
-                    // Esperar el resultado del Quality Gate
+                    // Esperar el resultado del Quality Gate.
+                    // El tiempo de espera es de 10 minutos. Un tiempo de 10-15 minutos es un punto de partida razonable.
+                    // Si el análisis de SonarQube tarda más, este valor debe ser aumentado.
                     timeout(time: 10, unit: 'MINUTES') {
                         def qg = waitForQualityGate()
                         
