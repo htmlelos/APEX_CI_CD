@@ -21,11 +21,9 @@ pipeline {
     }
     
     stages {
-        stage('Checkout test branch') {
+        stage('Checkout') {
             steps {
-                git branch: 'test',
-                    url: "${REPO_URL}",
-                    credentialsId: 'github-credentials'
+                checkout scm
             }
         }
         
@@ -92,6 +90,9 @@ pipeline {
         }
         
         stage('Stage and Generate Artifact') {
+            when {
+                branch 'test'
+            }
             environment {
                 DEVDB = credentials('apex-dev-credential')
             }
@@ -120,6 +121,9 @@ EOF
         }
         
         stage('Deploy to TEST') {
+            when {
+                branch 'test'
+            }
             environment {
                 TESTDB = credentials('apex-test-credential')
             }
@@ -148,6 +152,9 @@ EOF
         }
         
         stage('Verify Deployment') {
+            when {
+                branch 'test'
+            }
             environment {
                 TESTDB = credentials('apex-test-credential')
             }
