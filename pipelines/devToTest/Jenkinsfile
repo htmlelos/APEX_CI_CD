@@ -42,27 +42,22 @@ pipeline {
             }
             steps {
                 script {
-                    echo "=== Análisis de Código con SonarQube y Zap ==="
+                    echo "=== Análisis de Código con SonarQube y ZPA (Zap) ==="
                     
-                    // Usar withSonarQubeEnv para configurar el entorno
                     withSonarQubeEnv('SonarQube-Server') {
-                        sh '''
-                            # Crear directorio para reportes si no existe
-                            mkdir -p sonar-reports
-                            
-                            # Ejecutar SonarScanner con Zap plugin para PL/SQL
+                        sh """
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
                                 -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                                 -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
                                 -Dsonar.projectVersion=${BUILD_NUMBER} \
-                                -Dsonar.sources=.
+                                -Dsonar.sources=. \
                                 -Dsonar.inclusions=**/*.sql,**/*.pks,**/*.pkb,**/*.fnc,**/*.prc,**/*.trg \
                                 -Dsonar.exclusions=**/node_modules/**,**/target/**,**/artifact/** \
                                 -Dsonar.plsql.file.suffixes=sql,pks,pkb,fnc,prc,trg \
                                 -Dsonar.language=plsql \
                                 -Dsonar.sourceEncoding=UTF-8 \
                                 -Dsonar.working.directory=${WORKSPACE}/sonar-reports
-                        '''
+                        """
                     }
                 }
             }
@@ -70,30 +65,17 @@ pipeline {
         
         stage('Quality Gate') {
             when {
-                branch 'test'
+                branch 'develop'
             }
             steps {
                 script {
                     echo "=== Esperando resultado de Quality Gate ==="
-                    
-                    // Esperar el resultado del Quality Gate.
-                    // El tiempo de espera es de 10 minutos. Un tiempo de 10-15 minutos es un punto de partida razonable.
-                    // Si el análisis de SonarQube tarda más, este valor debe ser aumentado.
                     timeout(time: 10, unit: 'MINUTES') {
                         def qg = waitForQualityGate()
-                        
                         if (qg.status != 'OK') {
-                            echo "Quality Gate FAILED: ${qg.status}"
-                            echo "Detalles disponibles en: ${env.SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}"
-                            
-                            // Puedes decidir si fallas el build o solo adviertes
-                            // Opción 1: Fallar el build
-                            error "El análisis de calidad no pasó los umbrales definidos"
-                            
-                            // Opción 2: Solo advertir (comentar error y descomentar siguiente línea)
-                            // unstable("Quality Gate failed pero se continúa el despliegue")
+                            error "El análisis de calidad no pasó los umbrales definidos: ${qg.status}"
                         } else {
-                            echo "Quality Gate PASSED: El código cumple con los estándares de calidad"
+                            echo "Quality Gate PASSED: El código de develop cumple con los estándares"
                         }
                     }
                 }
@@ -102,20 +84,17 @@ pipeline {
         
         stage('Stage and Generate Artifact') {
             when {
-                branch 'test'
+                branch 'develop'
             }
             environment {
                 DEVDB = credentials('apex-dev-credential')
             }
             steps {
-                sh '''
+               sh '''
                     echo "=== Generando Artefacto usando contenedor Oracle ==="
-                    
-                    # 1. Sincronizar el código del Workspace de Jenkins al contenedor de Oracle
                     docker exec -u root ${ORACLE_CONTAINER} mkdir -p /tmp/apex_project
                     docker cp ${WORKSPACE}/. ${ORACLE_CONTAINER}:/tmp/apex_project/
 
-                    # 2. Ejecutar SQLcl dentro del contenedor de Oracle
                     docker exec ${ORACLE_CONTAINER} bash -c "
                         cd /tmp/apex_project
                         ${SQLCL_PATH} ${DEVDB_USR}/${DEVDB_PSW}@${DB_CONN_STR} <<EOF
@@ -124,16 +103,15 @@ pipeline {
 EOF
                     "
                     
-                    # 3. Traer el artefacto generado de vuelta a Jenkins para archivarlo
                     mkdir -p ${WORKSPACE}/artifact
                     docker cp ${ORACLE_CONTAINER}:/tmp/apex_project/artifact/. ${WORKSPACE}/artifact/
                 '''
             }
         }
         
-        stage('Deploy to TEST') {
+        stage('Deploy to Development') {
             when {
-                branch 'test'
+                branch 'develop'
             }
             environment {
                 TESTDB = credentials('apex-test-credential')
@@ -141,15 +119,9 @@ EOF
             steps {
                 sh '''
                     echo "=== Desplegando a TEST ==="
-                    
-                    # Identificar el archivo generado
                     ARTIFACT_FILE=$(find artifact -name "*.zip" | head -1)
-                    echo "Archivo encontrado: ${ARTIFACT_FILE}"
-
-                    # 1. Copiar el zip al contenedor de Oracle
                     docker cp ${WORKSPACE}/${ARTIFACT_FILE} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip
 
-                    # 2. Ejecutar el despliegue
                     docker exec ${ORACLE_CONTAINER} bash -c "
                         cd /tmp/apex_project
                         ${SQLCL_PATH} ${TESTDB_USR}/${TESTDB_PSW}@${DB_CONN_STR} <<EOF
@@ -164,7 +136,7 @@ EOF
         
         stage('Verify Deployment') {
             when {
-                branch 'test'
+                branch 'develop'
             }
             environment {
                 TESTDB = credentials('apex-test-credential')
