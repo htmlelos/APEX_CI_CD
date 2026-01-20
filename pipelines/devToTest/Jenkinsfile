@@ -197,7 +197,7 @@ EOF
             )
         }
         always {
-            node { // IMPORTANTE: Sin esto, los comandos 'sh' y 'archiveArtifacts' fallarán
+            node('') { // IMPORTANTE: Sin esto, los comandos 'sh' y 'archiveArtifacts' fallarán
                 script {
                     sh 'docker exec ${ORACLE_CONTAINER} rm -rf /tmp/apex_project /tmp/deploy_app.zip || true'
                     archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
