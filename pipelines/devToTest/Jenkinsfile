@@ -197,21 +197,21 @@ EOF
             )
         }
         always {
-            // Limpiar archivos temporales en el contenedor de Oracle
-            sh 'docker exec ${ORACLE_CONTAINER} rm -rf /tmp/apex_project /tmp/deploy_app.zip || true'
-            archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
-            
-            // Publicar métricas de SonarQube en Jenkins
-            script {
-                if (fileExists('sonar-reports')) {
-                    publishHTML([
-                        allowMissing: true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'sonar-reports',
-                        reportFiles: 'report-task.txt',
-                        reportName: 'SonarQube Report'
-                    ])
+            node { // IMPORTANTE: Sin esto, los comandos 'sh' y 'archiveArtifacts' fallarán
+                script {
+                    sh 'docker exec ${ORACLE_CONTAINER} rm -rf /tmp/apex_project /tmp/deploy_app.zip || true'
+                    archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
+                    
+                    if (fileExists('sonar-reports')) {
+                        publishHTML([
+                            allowMissing: true,
+                            alwaysLinkToLastBuild: true,
+                            keepAll: true,
+                            reportDir: 'sonar-reports',
+                            reportFiles: 'report-task.txt',
+                            reportName: 'SonarQube Report'
+                        ])
+                    }
                 }
             }
         }
