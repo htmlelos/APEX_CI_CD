@@ -44,7 +44,7 @@ pipeline {
                 script {
                     echo "=== Análisis de Código con SonarQube y ZPA (Zap) ==="
                     
-                    withSonarQubeEnv('SonarQube-Server') {
+                    withSonarQubeEnv('SonarQube') {
                         sh """
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
                                 -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
@@ -176,7 +176,7 @@ EOF
                     Quality Gate: PASSED
                     SonarQube Report: ${env.SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}
                 """,
-                to: "${env.CHANGE_AUTHOR_EMAIL}",
+                to: "${env.CHANGE_AUTHOR_EMAIL ?: 'sergiolucero73@gmail.com'}",
                 mimeType: 'text/plain'
             )
         }
@@ -192,14 +192,14 @@ EOF
                     
                     Revise los logs para más detalles.
                 """,
-                to: "${env.CHANGE_AUTHOR_EMAIL}",
+                to: "${env.CHANGE_AUTHOR_EMAIL ?: 'sergiolucero73@gmail.com'}",
                 mimeType: 'text/plain'
             )
         }
         always {
             node('') { // !IMPORTANTE: Sin esto, los comandos 'sh' y 'archiveArtifacts' fallarán
                 script {
-                    sh 'docker exec ${ORACLE_CONTAINER} rm -rf /tmp/apex_project /tmp/deploy_app.zip || true'
+                    sh '/usr/bin/docker exec ${ORACLE_CONTAINER} rm -rf /tmp/apex_project /tmp/deploy_app.zip || true'
                     archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
                     
                     if (fileExists('sonar-reports')) {
