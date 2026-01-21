@@ -1,12 +1,3 @@
-// NOTA: Este pipeline está configurado con 'agent any'.
-// Esto significa que se ejecutará en cualquier agente de Jenkins disponible.
-// Sin embargo, las etapas del pipeline ejecutan comandos 'docker'.
-// Por lo tanto, el agente de Jenkins que ejecute este job DEBE tener
-// Docker instalado y el demonio de Docker debe estar en ejecución y accesible.
-// El error original 'Invalid agent type "docker"' ocurría porque la declaración
-// del agente era 'agent { docker { ... } }' y el plugin de Docker no estaba configurado en Jenkins.
-// La solución es usar 'agent any' y asegurar que el agente tenga Docker disponible.
-
 pipeline {
     agent any
     
@@ -16,7 +7,9 @@ pipeline {
         SQLCL_PATH       = "/opt/sqlcl/bin/sql"
         DB_SERVICE       = "FREEPDB1"
         REPO_URL         = "https://github.com/htmlelos/APEX_CI_CD.git"
-        DB_CONN_STR      = "localhost:1522/${DB_SERVICE}"
+        
+        // ¡IMPORTANTE! Internamente en el contenedor Oracle el puerto es 1521
+        DB_CONN_STR      = "localhost:1521/${DB_SERVICE}"
         
         // Configuración de SonarQube
         SONAR_SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
@@ -24,7 +17,6 @@ pipeline {
         SONAR_PROJECT_NAME = "APEX Project - ${env.BRANCH_NAME}"
     }
     
-    // Trigger automático cuando hay merge a test
     triggers {
         githubPush()
     }
@@ -42,8 +34,7 @@ pipeline {
             }
             steps {
                 script {
-                    echo "=== Análisis de Código con SonarQube y ZPA (Zap) ==="
-                    
+                    echo "=== Análisis de Código con SonarQube (Solo Develop) ==="
                     withSonarQubeEnv('SonarQube') {
                         sh """
                             /${SONAR_SCANNER_HOME}/bin/sonar-scanner \
@@ -73,21 +64,18 @@ pipeline {
                     timeout(time: 10, unit: 'MINUTES') {
                         def qg = waitForQualityGate()
                         if (qg.status != 'OK') {
-                            error "El análisis de calidad no pasó los umbrales definidos: ${qg.status}"
+                            error "El análisis de calidad no pasó los umbrales: ${qg.status}"
                         } else {
-                            echo "Quality Gate PASSED: El código de develop cumple con los estándares"
+                            echo "Quality Gate PASSED"
                         }
                     }
                 }
             }
         }
         
-        stage('Stage and Generate Artifact') {
-            when {
-                branch 'develop'
-            }
+        stage('Generate Artifact') {
             environment {
-                DEVDB = credentials('apex-dev-credential')
+                DB_CREDS = credentials('apex-dev-credential')
             }
             steps {
                sh '''
@@ -97,8 +85,8 @@ pipeline {
 
                     docker exec ${ORACLE_CONTAINER} bash -c "
                         cd /tmp/apex_project
-                        ${SQLCL_PATH} ${DEVDB_USR}/${DEVDB_PSW}@${DB_CONN_STR} <<EOF
-                        project gen-artifact -name app-test -version ${BUILD_NUMBER}
+                        ${SQLCL_PATH} ${DB_CREDS_USR}/${DB_CREDS_PSW}@${DB_CONN_STR} <<EOF
+                        project gen-artifact -name app-${env.BRANCH_NAME} -version ${BUILD_NUMBER}
                         exit
 EOF
                     "
@@ -109,10 +97,30 @@ EOF
             }
         }
         
-        stage('Deploy to Development') {
-            when {
-                branch 'develop'
+        stage('Deploy to DEV') {
+            when { branch 'develop' }
+            environment {
+                DEVDB = credentials('apex-dev-credential')
             }
+            steps {
+                sh '''
+                    echo "=== Desplegando a Desarrollo ==="
+                    ARTIFACT_FILE=$(find artifact -name "*.zip" | head -1)
+                    docker cp ${WORKSPACE}/${ARTIFACT_FILE} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip
+
+                    docker exec ${ORACLE_CONTAINER} bash -c "
+                        cd /tmp/apex_project
+                        ${SQLCL_PATH} ${DEVDB_USR}/${DEVDB_PSW}@${DB_CONN_STR} <<EOF
+                        project deploy -file /tmp/deploy_app.zip
+                        exit
+EOF
+                    "
+                '''
+            }
+        }
+
+        stage('Deploy to TEST') {
+            when { branch 'test' }
             environment {
                 TESTDB = credentials('apex-test-credential')
             }
@@ -133,87 +141,30 @@ EOF
                 '''
             }
         }
-        
-        stage('Verify Deployment') {
-            when {
-                branch 'develop'
-            }
-            environment {
-                TESTDB = credentials('apex-test-credential')
-            }
-            steps {
-                sh '''
-                    echo "=== Verificando Aplicación en APEX ==="
-                    docker exec ${ORACLE_CONTAINER} bash -c "
-                        ${SQLCL_PATH} -S ${TESTDB_USR}/${TESTDB_PSW}@${DB_CONN_STR} <<EOF
-                        SET PAGESIZE 50
-                        SET FEEDBACK OFF
-                        COLUMN application_id FORMAT 999999
-                        COLUMN alias FORMAT A20
-                        COLUMN workspace FORMAT A20
-                        
-                        SELECT application_id, alias, workspace 
-                        FROM apex_applications 
-                        WHERE workspace = 'TEST_WRKSPC_CICD';
-                        exit
-EOF
-                    "
-                '''
-            }
-        }
     }
     
     post {
         success {
-            echo 'Deploy a TEST completado exitosamente'
             emailext(
-                subject: "✅ Deploy Exitoso - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """
-                    El deploy a TEST se completó exitosamente.
-                    
-                    Job: ${env.JOB_NAME}
-                    Build: ${env.BUILD_NUMBER}
-                    Quality Gate: PASSED
-                    SonarQube Report: ${env.SONAR_HOST_URL}/dashboard?id=${SONAR_PROJECT_KEY}
-                """,
+                subject: "✅ Exitoso - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "El deploy de la rama ${env.BRANCH_NAME} se completó exitosamente.",
                 to: "${env.CHANGE_AUTHOR_EMAIL ?: 'sergiolucero73@gmail.com'}",
                 mimeType: 'text/plain'
             )
         }
         failure {
-            echo 'Error en deploy a TEST'
             emailext(
-                subject: "❌ Deploy Fallido - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """
-                    El deploy a TEST ha fallado.
-                    
-                    Job: ${env.JOB_NAME}
-                    Build: ${env.BUILD_NUMBER}
-                    
-                    Revise los logs para más detalles.
-                """,
+                subject: "❌ Fallido - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "El build de la rama ${env.BRANCH_NAME} ha fallado.",
                 to: "${env.CHANGE_AUTHOR_EMAIL ?: 'sergiolucero73@gmail.com'}",
                 mimeType: 'text/plain'
             )
         }
         always {
-            node('') { // !IMPORTANTE: Sin esto, los comandos 'sh' y 'archiveArtifacts' fallarán
+            node('') {
                 script {
-                    sh '/usr/bin/docker exec ${ORACLE_CONTAINER} rm -rf /tmp/apex_project /tmp/deploy_app.zip || true'
+                    sh '/usr/bin/docker exec -u root ${ORACLE_CONTAINER} rm -rf /tmp/apex_project /tmp/deploy_app.zip || true'
                     archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
-                    
-                    /*
-                    if (fileExists('sonar-reports')) {
-                        publishHTML([
-                            allowMissing: true,
-                            alwaysLinkToLastBuild: true,
-                            keepAll: true,
-                            reportDir: 'sonar-reports',
-                            reportFiles: 'report-task.txt',
-                            reportName: 'SonarQube Report'
-                        ])
-                    }
-                    */
                 }
             }
         }
