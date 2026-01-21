@@ -202,6 +202,7 @@ EOF
                     sh '/usr/bin/docker exec ${ORACLE_CONTAINER} rm -rf /tmp/apex_project /tmp/deploy_app.zip || true'
                     archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
                     
+                    /*
                     if (fileExists('sonar-reports')) {
                         publishHTML([
                             allowMissing: true,
@@ -212,6 +213,7 @@ EOF
                             reportName: 'SonarQube Report'
                         ])
                     }
+                    */
                 }
             }
         }
