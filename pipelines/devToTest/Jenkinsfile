@@ -73,7 +73,7 @@ pipeline {
                     echo "=== Generando Artefacto en contenedor Oracle ==="
                     
                     // Instalamos Java 17 requerido por SQLcl 25.4 (si no existe)
-                    sh "docker exec -u root ${ORACLE_CONTAINER} microdnf install -y java-17-openjdk || true"
+                    sh "docker exec -u root ${ORACLE_CONTAINER} dnf install -y java-17-openjdk || true"
 
                     // Script para generar artefacto
                     // Incluimos la actualización de versión DENTRO de SQLcl para mayor seguridad
