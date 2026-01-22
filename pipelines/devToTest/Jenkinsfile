@@ -76,6 +76,8 @@ pipeline {
                     // Incluimos la actualización de versión DENTRO de SQLcl para mayor seguridad
                     def genScript = """
                         cd ${BUILD_DIR}
+                        mkdir -p dist
+                        mkdir -p artifact
                         
                         # Fix Version Mismatch
                         ${SQLCL_PATH} /nolog <<EOF
@@ -88,7 +90,7 @@ EOF
                         ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
                         cd ${BUILD_DIR}
                         !pwd
-                        project gen-artifact -name app-${BRANCH_NAME} -version ${BUILD_NUMBER}
+                        project gen-artifact -name app-${BRANCH_NAME} -version ${BUILD_NUMBER} artifact
                         exit
 EOF
                     """
@@ -113,7 +115,7 @@ EOF
                     
                     // Debug: Verificar estructura generada
                     sh "echo '--- Debug: Listado del directorio de build ---'"
-                    sh "docker exec -u root ${ORACLE_CONTAINER} ls -laR ${BUILD_DIR}"
+                    // sh "docker exec -u root ${ORACLE_CONTAINER} ls -laR ${BUILD_DIR}"
                     
                     sh "mkdir -p artifact"
                     sh "docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/ || echo 'No se pudo copiar el artefacto'"
