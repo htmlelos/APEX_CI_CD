@@ -91,7 +91,7 @@ EOF
                     """
                     writeFile file: 'gen_artifact.sh', text: genScript
                     
-                    // Setup consolidado: mkdir + chown + chmod en un solo paso
+                    // Setup consolidado con comillas correctas para bash -c
                     sh "docker exec -u root ${ORACLE_CONTAINER} bash -c 'mkdir -p ${BUILD_DIR} && chown -R root:root ${BUILD_DIR} && chmod -R 777 ${BUILD_DIR}'"
                     
                     // Copiamos archivos
@@ -115,12 +115,12 @@ EOF
                 script {
                     echo "=== Desplegando a Desarrollo ==="
                     
-                    // Detección de archivos usando findFiles (Plugin Pipeline Utility Steps)
-                    def files = findFiles(glob: 'artifact/*.zip')
-                    if (files.length == 0) {
+                    // Detección robusta de zip por consola (ya que findFiles no está disponible)
+                    def artifactFile = sh(script: "find artifact/ -name '*.zip' | head -1", returnStdout: true).trim()
+                    
+                    if (!artifactFile) {
                         error "No se encontró ningún archivo .zip en la carpeta artifact/. Abortando deploy."
                     }
-                    def artifactFile = files[0].path
                     
                     def deployScript = """
                         cd ${BUILD_DIR}
@@ -156,11 +156,11 @@ EOF
                 script {
                     echo "=== Desplegando a TEST ==="
                     
-                    def files = findFiles(glob: 'artifact/*.zip')
-                    if (files.length == 0) {
+                    def artifactFile = sh(script: "find artifact/ -name '*.zip' | head -1", returnStdout: true).trim()
+                    
+                    if (!artifactFile) {
                         error "No se encontró ningún archivo .zip en la carpeta artifact/. Abortando deploy."
                     }
-                    def artifactFile = files[0].path
                     
                     def deployScript = """
                         cd ${BUILD_DIR}
