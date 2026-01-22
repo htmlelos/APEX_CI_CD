@@ -93,6 +93,10 @@ EOF
                         project gen-artifact -name app-${BRANCH_NAME} -version ${BUILD_NUMBER} -debug
                         exit
 EOF
+                        
+                        # Mover el zip generado a la carpeta artifact para asegurar su descarga
+                        mv *.zip artifact/ || echo "No se encontro archivo .zip en la raiz"
+                        ls -la artifact/
                     """
                     writeFile file: 'gen_artifact.sh', text: genScript
                     
