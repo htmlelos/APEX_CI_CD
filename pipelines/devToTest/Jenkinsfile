@@ -72,14 +72,6 @@ pipeline {
                 script {
                     echo "=== Generando Artefacto en contenedor Oracle ==="
                     
-                    // Aseguramos directorio base
-                    sh "docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}"
-                    sh "docker exec -u root ${ORACLE_CONTAINER} chown -R root:root ${BUILD_DIR}"
-                    sh "docker exec -u root ${ORACLE_CONTAINER} chmod -R 777 ${BUILD_DIR}"
-                    
-                    // Copiamos código
-                    sh "docker cp . ${ORACLE_CONTAINER}:${BUILD_DIR}/"
-                    
                     // Script para generar artefacto
                     // Incluimos la actualización de versión DENTRO de SQLcl para mayor seguridad
                     def genScript = """
@@ -102,10 +94,15 @@ EOF
                     """
                     writeFile file: 'gen_artifact.sh', text: genScript
                     
-                    // Transferir y dar permisos al script
-                    sh "docker cp gen_artifact.sh ${ORACLE_CONTAINER}:${BUILD_DIR}/gen_artifact.sh"
-                    // Corrección importante: usamos 'oracle:' para asignar el grupo por defecto del usuario
-                    sh "docker exec -u root ${ORACLE_CONTAINER} chown oracle: ${BUILD_DIR}/gen_artifact.sh"
+                    // Aseguramos directorio base
+                    sh "docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}"
+                    sh "docker exec -u root ${ORACLE_CONTAINER} chown -R root:root ${BUILD_DIR}"
+                    sh "docker exec -u root ${ORACLE_CONTAINER} chmod -R 777 ${BUILD_DIR}"
+                    
+                    // Copiamos código (incluyendo el script generado)
+                    sh "docker cp . ${ORACLE_CONTAINER}:${BUILD_DIR}/"
+                    
+                    // Dar permisos al script y al directorio
                     sh "docker exec -u root ${ORACLE_CONTAINER} chmod +x ${BUILD_DIR}/gen_artifact.sh"
                     
                     // Cambiar propietario del directorio a oracle para permisos de escritura
