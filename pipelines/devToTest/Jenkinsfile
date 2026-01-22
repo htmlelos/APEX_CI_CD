@@ -79,6 +79,9 @@ pipeline {
                         mkdir -p dist
                         mkdir -p artifact
                         
+                        echo "--- Checking Java Version ---"
+                        java -version
+                        
                         # Fix Version Mismatch
                         ${SQLCL_PATH} /nolog <<EOF
                         cd ${BUILD_DIR}
@@ -90,6 +93,7 @@ EOF
                         ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
                         cd ${BUILD_DIR}
                         !pwd
+                        project stage -debug
                         project gen-artifact -name app-${BRANCH_NAME} -version ${BUILD_NUMBER} -debug
                         exit
 EOF
