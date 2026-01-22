@@ -75,12 +75,32 @@ pipeline {
                     // Script para generar artefacto
                     // Incluimos la actualización de versión DENTRO de SQLcl para mayor seguridad
                     def genScript = """
+                        set -e  # Fail immediately if any command fails
+
+                        # Intentar localizar Java 17 instalado manualmente
+                        if [ -d "/usr/lib/jvm/java-17-openjdk" ]; then
+                            export JAVA_HOME="/usr/lib/jvm/java-17-openjdk"
+                        elif [ -d "/usr/java/jdk-17" ]; then
+                             export JAVA_HOME="/usr/java/jdk-17"
+                        fi
+                        
+                        if [ ! -z "\$JAVA_HOME" ]; then
+                            export PATH=\$JAVA_HOME/bin:\$PATH
+                        fi
+
+                        echo "--- Checking Java Version ---"
+                        java -version
+                        
+                        # Verificar versión mínima de Java (17 = class file 61)
+                        JAVA_VER=\$(java -version 2>&1 | head -n 1 | awk -F '"' '{print \$2}' | cut -d'.' -f1)
+                        if [ "\$JAVA_VER" -lt "17" ]; then
+                            echo "ERROR: Java 17 or higher is required. Found version \$JAVA_VER."
+                            exit 1
+                        fi
+
                         cd ${BUILD_DIR}
                         mkdir -p dist
                         mkdir -p artifact
-                        
-                        echo "--- Checking Java Version ---"
-                        java -version
                         
                         # Fix Version Mismatch
                         ${SQLCL_PATH} /nolog <<EOF
@@ -93,13 +113,15 @@ EOF
                         ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
                         cd ${BUILD_DIR}
                         !pwd
+                        WHENEVER SQLERROR EXIT SQL.SQLCODE
+                        WHENEVER OSERROR EXIT FAILURE
                         project stage -debug
                         project gen-artifact -name app-${BRANCH_NAME} -version ${BUILD_NUMBER} -debug
                         exit
 EOF
                         
                         # Mover el zip generado a la carpeta artifact para asegurar su descarga
-                        mv *.zip artifact/ || echo "No se encontro archivo .zip en la raiz"
+                        mv *.zip artifact/
                         ls -la artifact/
                     """
                     writeFile file: 'gen_artifact.sh', text: genScript
@@ -150,8 +172,11 @@ EOF
                     }
                     
                     def deployScript = """
+                        set -e
                         cd ${BUILD_DIR}
                         ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
+                        WHENEVER SQLERROR EXIT SQL.SQLCODE
+                        WHENEVER OSERROR EXIT FAILURE
                         project deploy -file /home/oracle/deploy_app.zip
                         exit
 EOF
