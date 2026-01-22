@@ -89,7 +89,10 @@ EOF
                     sh "docker exec -u root ${ORACLE_CONTAINER} mkdir -p /tmp/apex_project"
                     sh "docker cp . ${ORACLE_CONTAINER}:/tmp/apex_project/"
                     
-                    // Ejecutamos como root para evitar problemas de permisos con sed y el workspace copiado
+                    // Forzamos permisos y propietario para evitar el error de Permission Denied con sed
+                    sh "docker exec -u root ${ORACLE_CONTAINER} chown -R root:root /tmp/apex_project"
+                    sh "docker exec -u root ${ORACLE_CONTAINER} chmod -R 777 /tmp/apex_project"
+                    
                     sh "docker exec -u root -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash /tmp/apex_project/gen_artifact.sh"
                     
                     sh "mkdir -p artifact"
@@ -127,6 +130,9 @@ EOF
                     
                     sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
                     sh "docker cp deploy_dev.sh ${ORACLE_CONTAINER}:/tmp/apex_project/deploy.sh"
+                    
+                    // Asegurar permisos antes de ejecutar deploy
+                    sh "docker exec -u root ${ORACLE_CONTAINER} chown root:root /tmp/deploy_app.zip /tmp/apex_project/deploy.sh"
                     sh "docker exec -u root -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash /tmp/apex_project/deploy.sh"
                 }
             }
@@ -161,6 +167,9 @@ EOF
                     
                     sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
                     sh "docker cp deploy_test.sh ${ORACLE_CONTAINER}:/tmp/apex_project/deploy.sh"
+                    
+                    // Asegurar permisos antes de ejecutar deploy
+                    sh "docker exec -u root ${ORACLE_CONTAINER} chown root:root /tmp/deploy_app.zip /tmp/apex_project/deploy.sh"
                     sh "docker exec -u root -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash /tmp/apex_project/deploy.sh"
                 }
             }
