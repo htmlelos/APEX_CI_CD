@@ -102,14 +102,14 @@ EOF
                     
                     // Transferir y dar permisos al script
                     sh "docker cp gen_artifact.sh ${ORACLE_CONTAINER}:${BUILD_DIR}/gen_artifact.sh"
-                    sh "docker exec -u root ${ORACLE_CONTAINER} chown oracle:oracle ${BUILD_DIR}/gen_artifact.sh"
+                    // Corrección importante: usamos 'oracle:' para asignar el grupo por defecto del usuario
+                    sh "docker exec -u root ${ORACLE_CONTAINER} chown oracle: ${BUILD_DIR}/gen_artifact.sh"
                     sh "docker exec -u root ${ORACLE_CONTAINER} chmod +x ${BUILD_DIR}/gen_artifact.sh"
                     
-                    // Cambiar propietario del directorio a oracle para que SQLcl no tenga problemas de escritura
-                    sh "docker exec -u root ${ORACLE_CONTAINER} chown -R oracle:oracle ${BUILD_DIR}"
+                    // Cambiar propietario del directorio a oracle para permisos de escritura
+                    sh "docker exec -u root ${ORACLE_CONTAINER} chown -R oracle: ${BUILD_DIR}"
                     
-                    // Ejecutamos como usuario oracle usando comillas simples para evitar el warning de seguridad de Jenkins
-                    // La variable de entorno $DB_PSW se expandirá en la shell, no en Groovy
+                    // Ejecución segura: variables de entorno + comillas simples
                     sh 'docker exec -u oracle -e DB_USR=$DB_USR -e DB_PSW=$DB_PSW ' + ORACLE_CONTAINER + " bash ${BUILD_DIR}/gen_artifact.sh"
                     
                     // Debug: Verificar estructura generada
@@ -119,7 +119,7 @@ EOF
                     sh "mkdir -p artifact"
                     sh "docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/ || echo 'No se pudo copiar el artefacto'"
                     
-                    // Debug: Verificar el artefacto copiado
+                    // Debug: Verificar el artefacto copiado localmente
                     sh "echo '--- Debug: Listado local de artifacts ---'"
                     sh "ls -la artifact/"
                }
@@ -149,10 +149,11 @@ EOF
                     """
                     writeFile file: 'deploy_dev.sh', text: deployScript
                     
+                    // Transferencia de archivos
                     sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/home/oracle/deploy_app.zip"
                     sh "docker cp deploy_dev.sh ${ORACLE_CONTAINER}:${BUILD_DIR}/deploy.sh"
                     
-                    sh "docker exec -u root ${ORACLE_CONTAINER} chown oracle:oracle /home/oracle/deploy_app.zip ${BUILD_DIR}/deploy.sh"
+                    sh "docker exec -u root ${ORACLE_CONTAINER} chown oracle: /home/oracle/deploy_app.zip ${BUILD_DIR}/deploy.sh"
                     
                     // Ejecución segura
                     sh 'docker exec -u oracle -e DB_USR=$DB_USR -e DB_PSW=$DB_PSW ' + ORACLE_CONTAINER + " bash ${BUILD_DIR}/deploy.sh"
@@ -187,7 +188,7 @@ EOF
                     sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/home/oracle/deploy_app.zip"
                     sh "docker cp deploy_test.sh ${ORACLE_CONTAINER}:${BUILD_DIR}/deploy.sh"
                     
-                    sh "docker exec -u root ${ORACLE_CONTAINER} chown oracle:oracle /home/oracle/deploy_app.zip ${BUILD_DIR}/deploy.sh"
+                    sh "docker exec -u root ${ORACLE_CONTAINER} chown oracle: /home/oracle/deploy_app.zip ${BUILD_DIR}/deploy.sh"
                     
                     // Ejecución segura
                     sh 'docker exec -u oracle -e DB_USR=$DB_USR -e DB_PSW=$DB_PSW ' + ORACLE_CONTAINER + " bash ${BUILD_DIR}/deploy.sh"
