@@ -88,7 +88,9 @@ EOF
                     
                     sh "docker exec -u root ${ORACLE_CONTAINER} mkdir -p /tmp/apex_project"
                     sh "docker cp . ${ORACLE_CONTAINER}:/tmp/apex_project/"
-                    sh "docker exec -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash /tmp/apex_project/gen_artifact.sh"
+                    
+                    // Ejecutamos como root para evitar problemas de permisos con sed y el workspace copiado
+                    sh "docker exec -u root -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash /tmp/apex_project/gen_artifact.sh"
                     
                     sh "mkdir -p artifact"
                     sh "docker cp ${ORACLE_CONTAINER}:/tmp/apex_project/artifact/. artifact/ || echo 'No se pudo copiar el artefacto'"
@@ -104,10 +106,11 @@ EOF
             steps {
                 script {
                     echo "=== Desplegando a Desarrollo ==="
-                    def artifactFile = sh(script: 'find artifact -name "*.zip" | head -1', returnStdout: true).trim()
+                    // Buscamos el zip de forma más robusta
+                    def artifactFile = sh(script: 'find artifact/ -name "*.zip" | head -1', returnStdout: true).trim()
                     
                     if (!artifactFile) {
-                        error "No se encontró ningún archivo .zip en la carpeta artifact/"
+                        error "No se encontró ningún archivo .zip en la carpeta artifact/. Abortando deploy."
                     }
                     
                     def deployScript = """
@@ -124,7 +127,7 @@ EOF
                     
                     sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
                     sh "docker cp deploy_dev.sh ${ORACLE_CONTAINER}:/tmp/apex_project/deploy.sh"
-                    sh "docker exec -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash /tmp/apex_project/deploy.sh"
+                    sh "docker exec -u root -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash /tmp/apex_project/deploy.sh"
                 }
             }
         }
@@ -137,10 +140,10 @@ EOF
             steps {
                 script {
                     echo "=== Desplegando a TEST ==="
-                    def artifactFile = sh(script: 'find artifact -name "*.zip" | head -1', returnStdout: true).trim()
+                    def artifactFile = sh(script: 'find artifact/ -name "*.zip" | head -1', returnStdout: true).trim()
                     
                     if (!artifactFile) {
-                        error "No se encontró ningún archivo .zip en la carpeta artifact/"
+                        error "No se encontró ningún archivo .zip en la carpeta artifact/. Abortando deploy."
                     }
                     
                     def deployScript = """
@@ -158,7 +161,7 @@ EOF
                     
                     sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
                     sh "docker cp deploy_test.sh ${ORACLE_CONTAINER}:/tmp/apex_project/deploy.sh"
-                    sh "docker exec -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash /tmp/apex_project/deploy.sh"
+                    sh "docker exec -u root -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash /tmp/apex_project/deploy.sh"
                 }
             }
         }
