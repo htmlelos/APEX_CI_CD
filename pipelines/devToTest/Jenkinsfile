@@ -73,15 +73,16 @@ pipeline {
                     
                     def genScript = """
                         cd /tmp/apex_project
-                        # Actualizar versión de SQLcl usando el propio comando del proyecto (más robusto)
+                        # Actualizar versión de SQLcl usando el propio comando del proyecto
                         ${SQLCL_PATH} /nolog <<EOF
                         cd /tmp/apex_project
                         project config set -name sqlcl.version -value 25.4.0.0
                         exit
 EOF
                         
-                        # Generar el artefacto
+                        # Generar el artefacto (Aseguramos cd dentro de la sesión)
                         ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
+                        cd /tmp/apex_project
                         project gen-artifact -name app-${BRANCH_NAME} -version ${BUILD_NUMBER}
                         exit
 EOF
@@ -111,8 +112,8 @@ EOF
             steps {
                 script {
                     echo "=== Desplegando a Desarrollo ==="
-                    // Buscamos el zip de forma más robusta con comillas dobles para evitar errores de shell
-                    def artifactFile = sh(script: "find artifact/ -name '*.zip' | head -1", returnStdout: true).trim()
+                    // Buscamos el zip usando sintaxis simple de comillas
+                    def artifactFile = sh(script: 'find artifact/ -name "*.zip" | head -1', returnStdout: true).trim()
                     
                     if (!artifactFile) {
                         error "No se encontró ningún archivo .zip en la carpeta artifact/. Abortando deploy."
@@ -126,6 +127,7 @@ EOF
                         exit
 EOF
                         ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
+                        cd /tmp/apex_project
                         project deploy -file /tmp/deploy_app.zip
                         exit
 EOF
@@ -150,7 +152,7 @@ EOF
             steps {
                 script {
                     echo "=== Desplegando a TEST ==="
-                    def artifactFile = sh(script: "find artifact/ -name '*.zip' | head -1", returnStdout: true).trim()
+                    def artifactFile = sh(script: 'find artifact/ -name "*.zip" | head -1', returnStdout: true).trim()
                     
                     if (!artifactFile) {
                         error "No se encontró ningún archivo .zip en la carpeta artifact/. Abortando deploy."
@@ -164,6 +166,7 @@ EOF
                         exit
 EOF
                         ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
+                        cd /tmp/apex_project
                         DEFINE DEFAULTS_FILE=dist/utils/properties/test.properties
                         project deploy -file /tmp/deploy_app.zip
                         exit
