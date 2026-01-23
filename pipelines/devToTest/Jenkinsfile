@@ -147,7 +147,7 @@ EOF
                         
                         echo "--- Buscando artefacto generado ---"
                         # Búsqueda más profunda del zip
-                        find . -name "*.zip" -type f -exec mv -v {} artifact/ \;
+                        find . -name "*.zip" -type f -exec mv -v {} artifact/ \\;
                         ls -la artifact/
                     """
                     writeFile file: 'gen_artifact.sh', text: genScript
