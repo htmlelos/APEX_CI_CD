@@ -86,24 +86,25 @@ pipeline {
             script {
                 echo "=== Generando Artefacto usando contenedor Oracle ==="
                 
-                // 1. Sincronizar el código usando TAR para asegurar .git y archivos ocultos (Opción Recomendada)
+                // 1. Sincronizar el código usando TAR para asegurar .git y archivos ocultos
                 sh """
-                    # Crear tarball que preserve archivos ocultos
-                    tar -cf project.tar -C ${WORKSPACE} .
+                    # Crear tarball en /tmp para evitar self-inclusion
+                    tar -cf /tmp/project.tar -C ${WORKSPACE} .
                     
                     # Asegurar directorio y copiar al contenedor
                     docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
-                    docker cp project.tar ${ORACLE_CONTAINER}:/tmp/
+                    docker cp /tmp/project.tar ${ORACLE_CONTAINER}:/tmp/
                     
                     # Extraer dentro del contenedor y ajustar permisos
                     docker exec -u root ${ORACLE_CONTAINER} bash -c "
+                        rm -rf ${BUILD_DIR}/* ${BUILD_DIR}/.* 2>/dev/null || true
                         tar -xf /tmp/project.tar -C ${BUILD_DIR}
                         chown -R oracle: ${BUILD_DIR}
                         rm /tmp/project.tar
                     "
                     
                     # Limpiar en Jenkins
-                    rm project.tar
+                    rm /tmp/project.tar
                 """
 
                 // 2. Ejecutar SQLcl dentro del contenedor
@@ -111,12 +112,19 @@ pipeline {
                     docker exec -u oracle -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} -e BRANCH_NAME=${BRANCH_NAME} ${ORACLE_CONTAINER} bash -c "
                         cd ${BUILD_DIR}
                         
-                        echo '=== Verificando estado de Git ==='
-                        ls -la | grep .git || (echo 'ERROR: .git no encontrado' && exit 1)
+                        echo '=== Verificando y Estabilizando Git ==='
                         git config --global --add safe.directory ${BUILD_DIR}
+                        git config --global user.email 'jenkins@ci.local'
+                        git config --global user.name 'Jenkins CI'
+                        
+                        # Asegurar que estamos en una rama con al menos un commit
                         git checkout -B \${BRANCH_NAME}
+                        git add .
+                        git commit -m 'Build #${BUILD_NUMBER} - Artifact generation' || echo 'No hay cambios para commit'
+                        
                         git status
-                        echo '================================'
+                        git log --oneline -n 3
+                        echo '===================================='
                         
                         echo '=== Configurando Proyecto SQLcl ==='
                         ${SQLCL_PATH} /nolog <<EOF
