@@ -22,7 +22,8 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
-    stage('Initialize') {
+    stages {
+        stage('Initialize') {
         steps {
             deleteDir()
             checkout scm
@@ -217,6 +218,7 @@ EOF
                     "
                 """
             }
+        }
         }
     }
 
