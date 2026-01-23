@@ -16,13 +16,26 @@ pipeline {
         githubPush()
     }
     
+    options {
+        skipDefaultCheckout()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
     stages {
+        stage('Initialize') {
+            steps {
+                deleteDir()
+                checkout scm
+            }
+        }
+
         stage('Pre-flight Checks') {
             steps {
                 script {
                     echo "=== Verificando Conectividad con Docker ==="
                     try {
-                        sh "docker ps -q --filter name=${ORACLE_CONTAINER}"
+                        sh "docker ps -q --filter name=${env.ORACLE_CONTAINER}"
                         echo "Docker connection OK"
                     } catch (Exception e) {
                         error "ERROR: Jenkins no puede comunicarse con el demonio de Docker. \n" +
@@ -35,7 +48,7 @@ pipeline {
         
         stage('Checkout') {
             steps {
-                checkout scm
+                echo "Checkout already performed in Initialize stage"
             }
         }
         
@@ -259,7 +272,7 @@ EOF
         }
         always {
             script {
-                sh "/usr/bin/docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} /home/oracle/deploy_app.zip || true"
+                sh "/usr/bin/docker exec -u root ${env.ORACLE_CONTAINER} rm -rf ${env.BUILD_DIR} /home/oracle/deploy_app.zip || true"
                 archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
             }
         }
