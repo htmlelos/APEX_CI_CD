@@ -276,7 +276,7 @@ EOF
         }
         always {
             script {
-                docker exec -u root ${env.ORACLE_CONTAINER} rm -rf ${env.BUILD_DIR} /home/oracle/deploy_app.zip || true
+                sh "docker exec -u root ${env.ORACLE_CONTAINER} rm -rf ${env.BUILD_DIR} /home/oracle/deploy_app.zip || true"
                 archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
             }
         }
