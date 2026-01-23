@@ -88,13 +88,18 @@ pipeline {
                 
                 // 1. Sincronizar el código del Workspace de Jenkins al contenedor
                 sh "docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}"
-                sh "docker cp . ${ORACLE_CONTAINER}:${BUILD_DIR}/"
+                // Usar "${WORKSPACE}/." asegura que se copien todos los archivos, incluyendo los ocultos (.git, .dbtools)
+                sh "docker cp ${WORKSPACE}/. ${ORACLE_CONTAINER}:${BUILD_DIR}/"
                 sh "docker exec -u root ${ORACLE_CONTAINER} chown -R oracle: ${BUILD_DIR}"
 
                 // 2. Ejecutar SQLcl dentro del contenedor (sin SSH/Git interno)
                 sh """
                     docker exec -u oracle -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash -c "
                         cd ${BUILD_DIR}
+                        
+                        # Reparar estado de Git para SQLcl (crucial para 'project' commands)
+                        git config --global --add safe.directory ${BUILD_DIR}
+                        
                         # Forzar versión compatible si es necesario
                         ${SQLCL_PATH} /nolog <<EOF
                         project config set -name sqlcl.version -value 25.4.0.0
