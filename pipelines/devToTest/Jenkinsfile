@@ -86,31 +86,50 @@ pipeline {
             script {
                 echo "=== Generando Artefacto usando contenedor Oracle ==="
                 
-                // 1. Sincronizar el código del Workspace de Jenkins al contenedor
-                sh "docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}"
-                // Usar "${WORKSPACE}/." asegura que se copien todos los archivos, incluyendo los ocultos (.git, .dbtools)
-                sh "docker cp ${WORKSPACE}/. ${ORACLE_CONTAINER}:${BUILD_DIR}/"
-                sh "docker exec -u root ${ORACLE_CONTAINER} chown -R oracle: ${BUILD_DIR}"
-
-                // 2. Ejecutar SQLcl dentro del contenedor (sin SSH/Git interno)
+                // 1. Sincronizar el código usando TAR para asegurar .git y archivos ocultos (Opción Recomendada)
                 sh """
-                    docker exec -u oracle -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash -c "
+                    # Crear tarball que preserve archivos ocultos
+                    tar -cf project.tar -C ${WORKSPACE} .
+                    
+                    # Asegurar directorio y copiar al contenedor
+                    docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
+                    docker cp project.tar ${ORACLE_CONTAINER}:/tmp/
+                    
+                    # Extraer dentro del contenedor y ajustar permisos
+                    docker exec -u root ${ORACLE_CONTAINER} bash -c "
+                        tar -xf /tmp/project.tar -C ${BUILD_DIR}
+                        chown -R oracle: ${BUILD_DIR}
+                        rm /tmp/project.tar
+                    "
+                    
+                    # Limpiar en Jenkins
+                    rm project.tar
+                """
+
+                // 2. Ejecutar SQLcl dentro del contenedor
+                sh """
+                    docker exec -u oracle -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} -e BRANCH_NAME=${BRANCH_NAME} ${ORACLE_CONTAINER} bash -c "
                         cd ${BUILD_DIR}
                         
-                        # Reparar estado de Git para SQLcl (crucial para 'project' commands)
+                        echo '=== Verificando estado de Git ==='
+                        ls -la | grep .git || (echo 'ERROR: .git no encontrado' && exit 1)
                         git config --global --add safe.directory ${BUILD_DIR}
+                        git checkout -B \${BRANCH_NAME}
+                        git status
+                        echo '================================'
                         
-                        # Forzar versión compatible si es necesario
+                        echo '=== Configurando Proyecto SQLcl ==='
                         ${SQLCL_PATH} /nolog <<EOF
                         project config set -name sqlcl.version -value 25.4.0.0
+                        project config set -name sqlcl.connectionName -value \${BRANCH_NAME}
                         exit
 EOF
-                        # Generar el ZIP
+                        echo '=== Generando Artefacto ==='
                         ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
                         project stage
-                        project gen-artifact -name app-${BRANCH_NAME} -version ${BUILD_NUMBER}
+                        project gen-artifact -name app-\${BRANCH_NAME} -version ${BUILD_NUMBER}
                         exit
 EOF
                     "
