@@ -135,6 +135,10 @@ EOF
                     """
                     writeFile file: 'gen_artifact.sh', text: genScript
                     
+                    // Aseguramos que git esté instalado en el contenedor para reparar el estado de la rama
+                    echo "--- Instalando Git en el contenedor (si falta) ---"
+                    sh "docker exec -u root ${ORACLE_CONTAINER} bash -c 'microdnf install -y git || yum install -y git || apk add git || echo \"Git already installed or package manager not found\"'"
+
                     // Aseguramos directorio base
                     sh "docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}"
                     sh "docker exec -u root ${ORACLE_CONTAINER} chown -R root:root ${BUILD_DIR}"
