@@ -200,7 +200,7 @@ EOF
                         SET FEEDBACK OFF
                         SELECT application_id, alias, workspace 
                         FROM apex_applications 
-                        WHERE workspace = 'DESA_SCHEMA';
+                        WHERE workspace = 'DESA_WRKSPC_CICD';
                         exit
 EOF
                     "
@@ -227,6 +227,8 @@ EOF
                         ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
+                        SET DEFINE ON
+                        project config set -name sqlcl.version -value 25.4.0.0
                         DEFINE DEFAULTS_FILE=dist/utils/properties/test.properties
                         project deploy -file /tmp/deploy_app.zip
                         exit
@@ -252,7 +254,7 @@ EOF
                         SET FEEDBACK OFF
                         SELECT application_id, alias, workspace 
                         FROM apex_applications 
-                        WHERE workspace = 'DESA_SCHEMA';
+                        WHERE workspace = 'TEST_WRKSPC_CICD';
                         exit
 EOF
                     "
