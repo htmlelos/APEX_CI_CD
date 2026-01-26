@@ -9,7 +9,7 @@ pipeline {
         MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
         
         // SONAR_SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-        SONAR_SCANNER_BIN = "/opt/sonar-scanner/bin/sonar-scanner" // Ruta manual en el servidor
+        SONAR_SCANNER_BIN = "/var/jenkins_home/tools/hudson.plugins.sonar.SonarRunnerInstallation/SonarScanner/bin/sonar-scanner"
         SONAR_PROJECT_KEY = "apex-project-${env.BRANCH_NAME}"
         SONAR_PROJECT_NAME = "APEX Project - ${env.BRANCH_NAME}"
     }
