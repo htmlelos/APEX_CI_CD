@@ -167,14 +167,33 @@ EOF
                 echo "=== Desplegando a Desarrollo ==="
                 def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
                 if (!artifactFile) error "No se encontró artefacto ZIP"
-                
-                sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
+                // Leer propiedades desde desa.properties para DEV
+                // Usamos grep genérico para encontrar las claves 'apex.*.key' sin hardcodear el ID
+                def propFile = "dist/utils/properties/desa.properties"
+                def workspaceId = sh(script: "grep -E 'apex.*.workspace' ${propFile} | head -n 1 | cut -d'=' -f2", returnStdout: true).trim()
+                def appId       = sh(script: "grep -E 'apex.*.appId' ${propFile} | head -n 1 | cut -d'=' -f2", returnStdout: true).trim()
+                def schema      = sh(script: "grep -E 'apex.*.schema' ${propFile} | head -n 1 | cut -d'=' -f2", returnStdout: true).trim()
+                def alias       = sh(script: "grep -E 'apex.*.alias' ${propFile} | head -n 1 | cut -d'=' -f2", returnStdout: true).trim()
+
+                echo "DEV Props: Workspace=${workspaceId}, AppId=${appId}, Schema=${schema}"
+
                 sh """
                     docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                         cd ${BUILD_DIR}
                         ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
+
+                        -- Configurar manualmente el contexto de importación
+                        BEGIN
+                            apex_application_install.set_workspace('${workspaceId}');
+                            apex_application_install.set_application_id(${appId});
+                            apex_application_install.set_schema('${schema}');
+                            apex_application_install.set_application_alias('${alias}');
+                            apex_application_install.generate_offset;
+                        END;
+                        /
+
                         project deploy -file /tmp/deploy_app.zip
                         exit
 EOF
@@ -192,6 +211,9 @@ EOF
         steps {
             script {
                 echo "=== Verificando Aplicación en Desarrollo ==="
+                // Leer propiedad workspace dinámicamente
+                def workspaceId = sh(script: "grep -E 'apex.*.workspace' dist/utils/properties/desa.properties | head -n 1 | cut -d'=' -f2", returnStdout: true).trim()
+
                 sh """
                     docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                         ${SQLCL_PATH} -S "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
@@ -199,7 +221,7 @@ EOF
                         SET FEEDBACK OFF
                         SELECT application_id, alias, workspace 
                         FROM apex_applications 
-                        WHERE workspace = 'DESA_WRKSPC_CICD';
+                        WHERE workspace = '${workspaceId}';
                         exit
 EOF
                     "
@@ -221,14 +243,18 @@ EOF
 
                 sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
                 
-                // Copiar el archivo de propiedades al contenedor
-                sh "docker cp dist/utils/properties/test.properties ${ORACLE_CONTAINER}:/tmp/"
+                // Leer propiedades desde test.properties para TEST
+                def propFile = "dist/utils/properties/test.properties"
+                def workspaceId = sh(script: "grep -E 'apex.*.workspace' ${propFile} | head -n 1 | cut -d'=' -f2", returnStdout: true).trim()
+                def appId       = sh(script: "grep -E 'apex.*.appId' ${propFile} | head -n 1 | cut -d'=' -f2", returnStdout: true).trim()
+                def schema      = sh(script: "grep -E 'apex.*.schema' ${propFile} | head -n 1 | cut -d'=' -f2", returnStdout: true).trim()
+                def alias       = sh(script: "grep -E 'apex.*.alias' ${propFile} | head -n 1 | cut -d'=' -f2", returnStdout: true).trim()
+
+                echo "TEST Props: Workspace=${workspaceId}, AppId=${appId}, Schema=${schema}"
+
                 sh """
                     docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                         cd ${BUILD_DIR}
-                        
-                        # Copiar el archivo de propiedades al directorio de trabajo
-                        cp /tmp/test.properties .
                         
                         ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
@@ -238,7 +264,16 @@ EOF
                         -- Configurar versión de SQLcl
                         project config set -name sqlcl.version -value 25.4.0.0
                         
-                        -- Deploy (las propiedades se leen desde test.properties)
+                        -- Configurar manualmente el contexto de importación
+                        BEGIN
+                            apex_application_install.set_workspace('${workspaceId}');
+                            apex_application_install.set_application_id(${appId});
+                            apex_application_install.set_schema('${schema}');
+                            apex_application_install.set_application_alias('${alias}');
+                            apex_application_install.generate_offset;
+                        END;
+                        /
+
                         project deploy -file /tmp/deploy_app.zip
                         exit
 EOF
@@ -256,6 +291,9 @@ EOF
         steps {
             script {
                 echo "=== Verificando Aplicación en TEST ==="
+                // Leer propiedad workspace dinámicamente
+                def workspaceId = sh(script: "grep -E 'apex.*.workspace' dist/utils/properties/test.properties | head -n 1 | cut -d'=' -f2", returnStdout: true).trim()
+                
                 sh """
                     docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                         ${SQLCL_PATH} -S "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
@@ -263,7 +301,7 @@ EOF
                         SET FEEDBACK OFF
                         SELECT application_id, alias, workspace 
                         FROM apex_applications 
-                        WHERE workspace = 'TEST_WRKSPC_CICD';
+                        WHERE workspace = '${workspaceId}';
                         exit
 EOF
                     "
