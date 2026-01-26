@@ -6,6 +6,7 @@ pipeline {
         SQLCL_PATH       = "/opt/sqlcl/bin/sql"
         DB_CONN_STR      = "localhost:1521/FREEPDB1"
         BUILD_DIR        = "/tmp/apex_project"
+        MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
         
         SONAR_SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
         SONAR_PROJECT_KEY = "apex-project-${env.BRANCH_NAME}"
@@ -267,9 +268,15 @@ EOF
     post {
         success {
             echo "Pipeline Exitoso - #${BUILD_NUMBER}"
+            mail to: "${env.MAIL_RECIPIENTS}",
+                 subject: "Success: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                 body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} fue exitosa.\n\nVer detalles en: ${env.BUILD_URL}"
         }
         failure {
             echo "Pipeline Fallido - #${BUILD_NUMBER}"
+            mail to: "${env.MAIL_RECIPIENTS}",
+                 subject: "Failure: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                 body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} ha fallado.\n\nVer consola para detalles: ${env.BUILD_URL}console"
         }
         always {
             script {
