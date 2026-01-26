@@ -8,7 +8,8 @@ pipeline {
         BUILD_DIR        = "/tmp/apex_project"
         MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
         
-        SONAR_SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+        // SONAR_SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+        SONAR_SCANNER_BIN = "/opt/sonar-scanner/bin/sonar-scanner" // Ruta manual en el servidor
         SONAR_PROJECT_KEY = "apex-project-${env.BRANCH_NAME}"
         SONAR_PROJECT_NAME = "APEX Project - ${env.BRANCH_NAME}"
     }
@@ -47,7 +48,7 @@ pipeline {
                 echo "=== Análisis de Código con SonarQube (Solo Develop) ==="
                 withSonarQubeEnv('SonarQube') {
                     sh """
-                        /${SONAR_SCANNER_HOME}/bin/sonar-scanner \
+                        ${SONAR_SCANNER_BIN} \
                             -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                             -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
                             -Dsonar.projectVersion=${BUILD_NUMBER} \
@@ -110,7 +111,7 @@ pipeline {
 
                 // 2. Ejecutar SQLcl dentro del contenedor
                 sh """
-                    docker exec -u oracle -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} -e BRANCH_NAME=${BRANCH_NAME} ${ORACLE_CONTAINER} bash -c "
+                    docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" -e BRANCH_NAME="\$BRANCH_NAME" ${ORACLE_CONTAINER} bash -c "
                         cd ${BUILD_DIR}
                         
                         echo '=== Verificando y Estabilizando Git ==='
@@ -128,23 +129,20 @@ pipeline {
                         git add .
                         git commit -m 'Build #${BUILD_NUMBER} - Artifact generation' || echo 'Sin nuevos cambios'
                         
-                        echo '=== Branches y Commits ==='
+                        echo '=== Estado de Git ==='
                         git branch -a
-                        echo 'Main commits: \$(git rev-list --count main)'
-                        echo 'Develop commits: \$(git rev-list --count \${BRANCH_NAME})'
                         git log --oneline -n 3
                         echo '===================================='
                         
-                        echo '=== Configurando Proyecto SQLcl ==='
-                        ${SQLCL_PATH} /nolog <<EOF
-                        project config set -name sqlcl.version -value 25.4.0.0
-                        project config set -name sqlcl.connectionName -value \${BRANCH_NAME}
-                        exit
-EOF
-                        echo '=== Generando Artefacto ==='
-                        ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
+                        echo '=== Generando Artefacto con SQLcl ==='
+                        ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
+                        -- Forzar configuración del proyecto
+                        project config set -name sqlcl.version -value 25.4.0.0
+                        project config set -name sqlcl.connectionName -value \${BRANCH_NAME}
+                        
+                        -- Generar artefacto
                         project stage
                         project gen-artifact -name app-\${BRANCH_NAME} -version ${BUILD_NUMBER}
                         exit
@@ -172,9 +170,9 @@ EOF
                 
                 sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
                 sh """
-                    docker exec -u oracle -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash -c "
+                    docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                         cd ${BUILD_DIR}
-                        ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
+                        ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
                         project deploy -file /tmp/deploy_app.zip
@@ -195,8 +193,8 @@ EOF
             script {
                 echo "=== Verificando Aplicación en Desarrollo ==="
                 sh """
-                    docker exec -u oracle -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash -c "
-                        ${SQLCL_PATH} -S \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
+                    docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                        ${SQLCL_PATH} -S "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
                         SET PAGESIZE 50
                         SET FEEDBACK OFF
                         SELECT application_id, alias, workspace 
@@ -223,15 +221,24 @@ EOF
 
                 sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
                 sh """
-                    docker exec -u oracle -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash -c "
+                    docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                         cd ${BUILD_DIR}
-                        ${SQLCL_PATH} \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
+                        ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
                         SET DEFINE ON
+                        
+                        -- Configurar proyecto
                         project config set -name sqlcl.version -value 25.4.0.0
-                        -- Usar overrides explícitos para asegurar que Liquibase los tome
-                        project deploy -file /tmp/deploy_app.zip -Dapex.102.workspace=TEST_WRKSPC_CICD -Dapex.102.appId=202 -Dapex.102.schema=TEST_SCHEMA -Dapex.102.alias=TEST_ALIAS
+                        
+                        -- Configurar overrides ANTES del deploy (desde test.properties)
+                        project config set -name apex.102.workspace -value TEST_WRKSPC_CICD
+                        project config set -name apex.102.appId -value 202
+                        project config set -name apex.102.schema -value TEST_SCHEMA
+                        project config set -name apex.102.alias -value TEST_ALIAS
+                        
+                        -- Ahora sí, deploy sin parámetros -D
+                        project deploy -file /tmp/deploy_app.zip
                         exit
 EOF
                     "
@@ -249,8 +256,8 @@ EOF
             script {
                 echo "=== Verificando Aplicación en TEST ==="
                 sh """
-                    docker exec -u oracle -e DB_USR=${DB_USR} -e DB_PSW=${DB_PSW} ${ORACLE_CONTAINER} bash -c "
-                        ${SQLCL_PATH} -S \${DB_USR}/\${DB_PSW}@${DB_CONN_STR} <<EOF
+                    docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                        ${SQLCL_PATH} -S "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
                         SET PAGESIZE 50
                         SET FEEDBACK OFF
                         SELECT application_id, alias, workspace 
@@ -262,21 +269,39 @@ EOF
                 """
             }
         }
-        }
     }
 
     post {
         success {
-            echo "Pipeline Exitoso - #${BUILD_NUMBER}"
-            mail to: "${env.MAIL_RECIPIENTS}",
-                 subject: "Success: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                 body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} fue exitosa.\n\nVer detalles en: ${env.BUILD_URL}"
+            script {
+                echo "=== INICIANDO ENVÍO DE CORREO DE ÉXITO ==="
+                echo "Destinatarios: ${env.MAIL_RECIPIENTS}"
+                echo "Job: ${env.JOB_NAME}"
+                echo "Build: ${env.BUILD_NUMBER}"
+                
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Success: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} fue exitosa.\n\nVer detalles en: ${env.BUILD_URL}"
+                    echo "✅ Correo enviado exitosamente"
+                } catch (Exception e) {
+                    echo "❌ ERROR enviando correo: ${e.message}"
+                    echo "Stack trace: ${e}"
+                }
+            }
         }
         failure {
-            echo "Pipeline Fallido - #${BUILD_NUMBER}"
-            mail to: "${env.MAIL_RECIPIENTS}",
-                 subject: "Failure: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                 body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} ha fallado.\n\nVer consola para detalles: ${env.BUILD_URL}console"
+            script {
+                echo "=== INICIANDO ENVÍO DE CORREO DE FALLO ==="
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Failure: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} ha fallado.\n\nVer consola: ${env.BUILD_URL}console"
+                    echo "✅ Correo de fallo enviado exitosamente"
+                } catch (Exception e) {
+                    echo "❌ ERROR enviando correo de fallo: ${e.message}"
+                }
+            }
         }
         always {
             script {
