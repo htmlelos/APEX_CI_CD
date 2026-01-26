@@ -4,6 +4,20 @@
     "connectionName" : "",
     "version" : "25.3.2.0"
   },
+  "connections" : {
+    "develop" : {
+        "schema" : "DESA_SCHEMA",
+        "workspace" : "DESA_WRKSPC_CICD",
+        "applicationId" : "302",
+        "applicationAlias" : "DESA_ALIAS"
+    },
+    "test" : {
+        "schema" : "TEST_SCHEMA",
+        "workspace" : "TEST_WRKSPC_CICD",
+        "applicationId" : "202",
+        "applicationAlias" : "TEST_ALIAS"
+    }
+  },
   "schemas" : [ "DESA_SCHEMA" ],
   "lastReleaseVersion" : "",
   "export" : {
