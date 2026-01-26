@@ -220,24 +220,25 @@ EOF
                 if (!artifactFile) error "No se encontró artefacto ZIP"
 
                 sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
+                
+                // Copiar el archivo de propiedades al contenedor
+                sh "docker cp dist/utils/properties/test.properties ${ORACLE_CONTAINER}:/tmp/"
                 sh """
                     docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                         cd ${BUILD_DIR}
+                        
+                        # Copiar el archivo de propiedades al directorio de trabajo
+                        cp /tmp/test.properties .
+                        
                         ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
                         SET DEFINE ON
                         
-                        -- Configurar proyecto
+                        -- Configurar versión de SQLcl
                         project config set -name sqlcl.version -value 25.4.0.0
                         
-                        -- Configurar overrides ANTES del deploy (desde test.properties)
-                        project config set -name apex.102.workspace -value TEST_WRKSPC_CICD
-                        project config set -name apex.102.appId -value 202
-                        project config set -name apex.102.schema -value TEST_SCHEMA
-                        project config set -name apex.102.alias -value TEST_ALIAS
-                        
-                        -- Ahora sí, deploy sin parámetros -D
+                        -- Deploy (las propiedades se leen desde test.properties)
                         project deploy -file /tmp/deploy_app.zip
                         exit
 EOF
