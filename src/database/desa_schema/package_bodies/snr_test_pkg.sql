@@ -41,7 +41,14 @@ create or replace package body desa_schema.snr_test_pkg as
     ) as
     begin
     -- TAREA: Se necesita implantación para procedure SNR_TEST_PKG.create_user
-        null;
+        insert into snr_users (
+            username,
+            email,
+            password
+        ) values ( p_user.username,
+                   p_user.email,
+                   p_user.password );
+
     end create_user;
 
     procedure update_user (
@@ -49,12 +56,18 @@ create or replace package body desa_schema.snr_test_pkg as
         p_user snr_users%rowtype
     ) as
     begin
-    -- TAREA: Se necesita implantación para procedure SNR_TEST_PKG.update_user
-        null;
+        update snr_users
+        set
+            username = p_user.username,
+            email = p_user.email,
+            password = p_user.password
+        where
+            id = p_id;
+
     end update_user;
 
 end snr_test_pkg;
 /
 
 
--- sqlcl_snapshot {"hash":"101c38c605019f11e1c314fb9d36f75efe845add","type":"PACKAGE_BODY","name":"SNR_TEST_PKG","schemaName":"DESA_SCHEMA","sxml":""}
+-- sqlcl_snapshot {"hash":"e9142953d4aad8c1248c3161dd916bb32b39b774","type":"PACKAGE_BODY","name":"SNR_TEST_PKG","schemaName":"DESA_SCHEMA","sxml":""}
