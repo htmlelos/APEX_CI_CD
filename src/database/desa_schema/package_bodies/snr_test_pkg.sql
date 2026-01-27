@@ -12,15 +12,28 @@ create or replace package body desa_schema.snr_test_pkg as
         open cr_data;
         fetch cr_data into v_users;
         close cr_data;
+    --
         return v_users;
     end get_users;
 
     function get_user_by_id (
         p_id snr_users.id%type
     ) return snr_users%rowtype as
+        cursor cr_data is
+        select
+            *
+        from
+            snr_users
+        where
+            id = p_id;
+    --
+        v_user cr_data%rowtype;
     begin
-    -- TAREA: Se necesita implantación para function SNR_TEST_PKG.get_user_by_id
-        return null;
+        open cr_data;
+        fetch cr_data into v_user;
+        close cr_data;
+    --
+        return v_user;
     end get_user_by_id;
 
     procedure create_user (
@@ -44,4 +57,4 @@ end snr_test_pkg;
 /
 
 
--- sqlcl_snapshot {"hash":"312ac7c66e510dce681fcda92766645f4632f505","type":"PACKAGE_BODY","name":"SNR_TEST_PKG","schemaName":"DESA_SCHEMA","sxml":""}
+-- sqlcl_snapshot {"hash":"101c38c605019f11e1c314fb9d36f75efe845add","type":"PACKAGE_BODY","name":"SNR_TEST_PKG","schemaName":"DESA_SCHEMA","sxml":""}
