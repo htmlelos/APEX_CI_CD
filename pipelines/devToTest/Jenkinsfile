@@ -54,7 +54,7 @@ pipeline {
                             -Dsonar.projectVersion=${BUILD_NUMBER} \
                             -Dsonar.sources=. \
                             -Dsonar.inclusions=**/*.sql,**/*.pks,**/*.pkb,**/*.fnc,**/*.prc,**/*.trg \
-                            -Dsonar.exclusions=**/node_modules/**,**/target/**,**/artifact/** \
+                            -Dsonar.exclusions=**/node_modules/**,**/target/**,**/artifact/**,dist/**,src/database/desa_schema/apex_apps/** \
                             -Dsonar.plsql.file.suffixes=sql,pks,pkb,fnc,prc,trg \
                             -Dsonar.language=plsql \
                             -Dsonar.sourceEncoding=UTF-8 \
