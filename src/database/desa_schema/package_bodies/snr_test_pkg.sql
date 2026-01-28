@@ -1,4 +1,4 @@
-create or replace package body desa_schema.snr_test_pkg as
+create or replace package body snr_test_pkg as
 
     function get_users return snr_users%rowtype as
         cursor cr_data is
