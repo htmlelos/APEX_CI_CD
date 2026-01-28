@@ -1,4 +1,4 @@
-create or replace package desa_schema.snr_test_pkg as 
+create or replace package snr_test_pkg as 
   /* TODO enter package declarations (types, exceptions, methods etc) here */
 
     function get_users return snr_users%rowtype;

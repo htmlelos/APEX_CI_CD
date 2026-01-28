@@ -119,15 +119,9 @@ pipeline {
                         git config --global user.email 'jenkins@ci.local'
                         git config --global user.name 'Jenkins CI'
                         
-                        # 1. Crear main como baseline (SQLcl lo requiere para comparar)
-                        git checkout -B main
-                        git add .
-                        git commit -m 'Baseline for build #${BUILD_NUMBER}' || echo 'Sin cambios para main'
-                        
-                        # 2. Crear/Checkout branch actual (ej. develop) desde main
-                        git checkout -B \${BRANCH_NAME}
-                        git add .
-                        git commit -m 'Build #${BUILD_NUMBER} - Artifact generation' || echo 'Sin nuevos cambios'
+                        # Asegurar que tenemos las ramas necesarias
+                        git fetch origin main || echo 'Main no existe en origin'
+                        git checkout ${BRANCH_NAME} || git checkout -B ${BRANCH_NAME}
                         
                         echo '=== Estado de Git ==='
                         git branch -a
