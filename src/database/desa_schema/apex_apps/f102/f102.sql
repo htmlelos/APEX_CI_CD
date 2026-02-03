@@ -36,10 +36,10 @@ prompt APPLICATION 102 - APP_CICD
 --   Exported By:     DESA_SCHEMA
 --   Flashback:       0
 --   Export Type:     Application Export
---     Pages:                      7
+--     Pages:                      8
 --       Items:                    4
 --       Processes:                4
---       Regions:                  6
+--       Regions:                  8
 --       Buttons:                  1
 --     Shared Components:
 --       Logic:
@@ -47,7 +47,7 @@ prompt APPLICATION 102 - APP_CICD
 --       Navigation:
 --         Lists:                  2
 --         Breadcrumbs:            1
---           Entries:              4
+--           Entries:              5
 --       Security:
 --         Authentication:         1
 --         Authorization:          1
@@ -150,7 +150,7 @@ wwv_flow_imp_shared.create_list(
  p_id=>wwv_flow_imp.id(33761322535704598)
 ,p_name=>'Navigation Menu'
 ,p_list_status=>'PUBLIC'
-,p_version_scn=>42940773
+,p_version_scn=>66756294
 );
 wwv_flow_imp_shared.create_list_item(
  p_id=>wwv_flow_imp.id(34061341255704905)
@@ -186,6 +186,15 @@ wwv_flow_imp_shared.create_list_item(
 ,p_list_item_icon=>'fa-file-o'
 ,p_list_item_current_type=>'COLON_DELIMITED_PAGE_LIST'
 ,p_list_item_current_for_pages=>'4'
+);
+wwv_flow_imp_shared.create_list_item(
+ p_id=>wwv_flow_imp.id(37764371550688568)
+,p_list_item_display_sequence=>50
+,p_list_item_link_text=>'USERS_LISTS'
+,p_list_item_link_target=>'f?p=&APP_ID.:8:&APP_SESSION.::&DEBUG.:::'
+,p_list_item_icon=>'fa-table'
+,p_list_item_current_type=>'COLON_DELIMITED_PAGE_LIST'
+,p_list_item_current_for_pages=>'8'
 );
 end;
 /
@@ -910,6 +919,12 @@ wwv_flow_imp_shared.create_menu_option(
 ,p_short_name=>'DETAIL_PAGE'
 ,p_link=>'f?p=&APP_ID.:4:&APP_SESSION.::&DEBUG.:::'
 ,p_page_id=>4
+);
+wwv_flow_imp_shared.create_menu_option(
+ p_id=>wwv_flow_imp.id(37765297210688584)
+,p_short_name=>'USERS_LISTS'
+,p_link=>'f?p=&APP_ID.:8:&APP_SESSION.::&DEBUG.:::'
+,p_page_id=>8
 );
 end;
 /
@@ -18189,6 +18204,105 @@ wwv_flow_imp_page.create_page(
 );
 end;
 /
+prompt --application/pages/page_00008
+begin
+wwv_flow_imp_page.create_page(
+ p_id=>8
+,p_name=>'USERS_LISTS'
+,p_alias=>'USERS-LISTS'
+,p_step_title=>'USERS_LISTS'
+,p_autocomplete_on_off=>'OFF'
+,p_page_template_options=>'#DEFAULT#'
+,p_protection_level=>'C'
+);
+wwv_flow_imp_page.create_page_plug(
+ p_id=>wwv_flow_imp.id(37764759039688578)
+,p_plug_name=>'Breadcrumb'
+,p_region_template_options=>'#DEFAULT#:t-BreadcrumbRegion--useBreadcrumbTitle'
+,p_component_template_options=>'#DEFAULT#'
+,p_plug_template=>wwv_flow_imp.id(33833977455704646)
+,p_plug_display_sequence=>10
+,p_plug_display_point=>'REGION_POSITION_01'
+,p_menu_id=>wwv_flow_imp.id(33760834440704595)
+,p_plug_source_type=>'NATIVE_BREADCRUMB'
+,p_menu_template_id=>wwv_flow_imp.id(33939357192704692)
+);
+wwv_flow_imp_page.create_report_region(
+ p_id=>wwv_flow_imp.id(37765441917688585)
+,p_name=>'USERS_LISTS'
+,p_template=>wwv_flow_imp.id(33872908428704660)
+,p_display_sequence=>10
+,p_region_template_options=>'#DEFAULT#:t-Region--noPadding:t-Region--hideHeader:t-Region--scrollBody'
+,p_component_template_options=>'#DEFAULT#:t-Report--stretch:t-Report--staticRowColors:t-Report--rowHighlight:t-Report--inline:t-Report--hideNoPagination'
+,p_source_type=>'NATIVE_SQL_REPORT'
+,p_query_type=>'TABLE'
+,p_query_table=>'SNR_USERS'
+,p_include_rowid_column=>false
+,p_ajax_enabled=>'Y'
+,p_lazy_loading=>false
+,p_query_row_template=>wwv_flow_imp.id(33900192880704673)
+,p_query_num_rows=>50
+,p_query_options=>'DERIVED_REPORT_COLUMNS'
+,p_query_no_data_found=>'no data found'
+,p_query_num_rows_type=>'NEXT_PREVIOUS_LINKS'
+,p_query_row_count_max=>500
+,p_pagination_display_position=>'BOTTOM_RIGHT'
+,p_prn_output=>'N'
+,p_prn_format=>'PDF'
+,p_sort_null=>'L'
+,p_plug_query_strip_html=>'N'
+);
+wwv_flow_imp_page.create_report_columns(
+ p_id=>wwv_flow_imp.id(37765826561688606)
+,p_query_column_id=>1
+,p_column_alias=>'ID'
+,p_column_display_sequence=>0
+,p_column_heading=>'ID'
+,p_use_as_row_header=>'N'
+,p_heading_alignment=>'LEFT'
+,p_default_sort_column_sequence=>1
+,p_disable_sort_column=>'N'
+,p_hidden_column=>'Y'
+,p_include_in_export=>'N'
+);
+wwv_flow_imp_page.create_report_columns(
+ p_id=>wwv_flow_imp.id(37766243167688608)
+,p_query_column_id=>2
+,p_column_alias=>'USERNAME'
+,p_column_display_sequence=>2
+,p_column_heading=>'Username'
+,p_use_as_row_header=>'N'
+,p_heading_alignment=>'LEFT'
+,p_default_sort_column_sequence=>1
+,p_disable_sort_column=>'N'
+,p_include_in_export=>'Y'
+);
+wwv_flow_imp_page.create_report_columns(
+ p_id=>wwv_flow_imp.id(37766609330688608)
+,p_query_column_id=>3
+,p_column_alias=>'EMAIL'
+,p_column_display_sequence=>3
+,p_column_heading=>'Email'
+,p_use_as_row_header=>'N'
+,p_heading_alignment=>'LEFT'
+,p_default_sort_column_sequence=>1
+,p_disable_sort_column=>'N'
+,p_include_in_export=>'Y'
+);
+wwv_flow_imp_page.create_report_columns(
+ p_id=>wwv_flow_imp.id(37767029564688608)
+,p_query_column_id=>4
+,p_column_alias=>'PASSWORD'
+,p_column_display_sequence=>4
+,p_column_heading=>'Password'
+,p_use_as_row_header=>'N'
+,p_heading_alignment=>'LEFT'
+,p_default_sort_column_sequence=>1
+,p_disable_sort_column=>'N'
+,p_include_in_export=>'Y'
+);
+end;
+/
 prompt --application/pages/page_09999
 begin
 wwv_flow_imp_page.create_page(
@@ -18408,4 +18522,4 @@ prompt  ...done
 
 
 
--- sqlcl_snapshot {"hash":"dfcc52a647cdef80719f3b912a83a96b84ecfc90","type":"APEX_APPLICATIONS","name":"f102","schemaName":"DESA_WRKSPC_CICD","sxml":""}
+-- sqlcl_snapshot {"hash":"c5aa1a6961b3724451d29932cdb89e0d05950725","type":"APEX_APPLICATIONS","name":"f102","schemaName":"DESA_WRKSPC_CICD","sxml":""}
