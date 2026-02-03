@@ -1,4 +1,4 @@
-create or replace package body snr_test_pkg as
+create or replace package body desa_schema.snr_test_pkg as
 
     function get_users return snr_users%rowtype as
         cursor cr_data is
@@ -70,4 +70,4 @@ end snr_test_pkg;
 /
 
 
--- sqlcl_snapshot {"hash":"cb78b4a34f649b398f14bc3d589fbe1b4e963c0e","type":"PACKAGE_BODY","name":"SNR_TEST_PKG","schemaName":"DESA_SCHEMA","sxml":""}
+-- sqlcl_snapshot {"hash":"e9142953d4aad8c1248c3161dd916bb32b39b774","type":"PACKAGE_BODY","name":"SNR_TEST_PKG","schemaName":"DESA_SCHEMA","sxml":""}

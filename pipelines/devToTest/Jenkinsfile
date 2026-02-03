@@ -261,6 +261,35 @@ EOF
             }
         }
     }
+    stage('Playwright Tests') {
+        when { branch 'test' }
+        steps {
+            script {
+                echo "=== Ejecutando Pruebas de UI con Playwright ==="
+                // Usamos la imagen oficial para asegurar consistencia
+                docker.image('mcr.microsoft.com/playwright:v1.40.0-jammy').inside {
+                    sh """
+                        npm install
+                        APEX_TEST_URL="http://localhost:8181/ords/r/test_wrkspc_cicd/app-cicd"
+                    """
+                }
+            }
+        }
+        post {
+            always {
+                publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'playwright-report',
+                    reportFiles: 'index.html',
+                    reportName: 'Playwright HTML Report',
+                    reportTitles: 'Resultados de Pruebas Playwright'
+                ])
+                archiveArtifacts artifacts: 'playwright-report/**', allowEmptyArchive: true
+            }
+        }
+    }
     
     }
 
