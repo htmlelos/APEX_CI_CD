@@ -1,5 +1,5 @@
-create or replace editionable trigger trb_snr_test before
-    delete or insert or update on snr_users
+create or replace editionable trigger desa_schema.trb_snr_test before
+    delete or insert or update on desa_schema.snr_users
     for each row
 begin
     if inserting then
@@ -12,7 +12,7 @@ begin
 end;
 /
 
-alter trigger trb_snr_test enable;
+alter trigger desa_schema.trb_snr_test enable;
 
 
--- sqlcl_snapshot {"hash":"6e29ae2af10df91c836ee37b0523b403d4b27bb8","type":"TRIGGER","name":"TRB_SNR_TEST","schemaName":"DESA_SCHEMA","sxml":""}
+-- sqlcl_snapshot {"hash":"20c04a6dd2d0dcc469e76c19c9d339691293f077","type":"TRIGGER","name":"TRB_SNR_TEST","schemaName":"DESA_SCHEMA","sxml":""}

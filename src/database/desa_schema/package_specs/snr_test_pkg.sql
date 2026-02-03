@@ -1,4 +1,4 @@
-create or replace package snr_test_pkg as 
+create or replace package desa_schema.snr_test_pkg as 
   /* TODO enter package declarations (types, exceptions, methods etc) here */
 
     function get_users return snr_users%rowtype;
@@ -20,4 +20,4 @@ end snr_test_pkg;
 /
 
 
--- sqlcl_snapshot {"hash":"090111397ff8e7c4ba8b0251487bc4df7c83c70f","type":"PACKAGE_SPEC","name":"SNR_TEST_PKG","schemaName":"DESA_SCHEMA","sxml":""}
+-- sqlcl_snapshot {"hash":"d974372cd4f0ed43c6581de2d3b5efc4607eb976","type":"PACKAGE_SPEC","name":"SNR_TEST_PKG","schemaName":"DESA_SCHEMA","sxml":""}
