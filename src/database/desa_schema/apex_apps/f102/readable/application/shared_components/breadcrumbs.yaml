@@ -89,3 +89,17 @@
         url: 'f?p=&APP_ID.:9:&APP_SESSION.::&DEBUG.:::'
         page: 9 # FORM_USERS
 
+  - # ====== Entry: BLANK_PAGE ===================================
+    id: 37967302058660349
+    identification: 
+      name: BLANK_PAGE
+      page-number: 6
+
+    execution: 
+      sequence: 10
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:6:&APP_SESSION.::&DEBUG.:::'
+        page: 6 # BLANK_PAGE
+
