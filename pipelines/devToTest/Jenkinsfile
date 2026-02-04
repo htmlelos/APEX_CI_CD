@@ -171,7 +171,7 @@ EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
 
-                        project deploy -file /tmp/deploy_app.zip
+                        project deploy -file /tmp/deploy_app.zip -environment develop
                         exit
 EOF
                     "
@@ -229,7 +229,7 @@ EOF
                         -- Configurar versión de SQLcl
                         project config set -name sqlcl.version -value 25.4.0.0
                         
-                        project deploy -file /tmp/deploy_app.zip
+                        project deploy -file /tmp/deploy_app.zip -environment test
                         exit
 EOF
                     "
