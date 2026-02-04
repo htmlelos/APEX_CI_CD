@@ -89,3 +89,31 @@
         url: 'f?p=&APP_ID.:9:&APP_SESSION.::&DEBUG.:::'
         page: 9 # FORM_USERS
 
+  - # ====== Entry: BLANK_PAGE ===================================
+    id: 37967302058660349
+    identification: 
+      name: BLANK_PAGE
+      page-number: 6
+
+    execution: 
+      sequence: 10
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:6:&APP_SESSION.::&DEBUG.:::'
+        page: 6 # BLANK_PAGE
+
+  - # ====== Entry: FEAT_!0 ======================================
+    id: 37969177000440648
+    identification: 
+      name: FEAT_!0
+      page-number: 7
+
+    execution: 
+      sequence: 10
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:7:&APP_SESSION.::&DEBUG.:::'
+        page: 7 # FEAT_!0
+
