@@ -8,7 +8,7 @@
     "develop": {
       "schema": "DESA_SCHEMA",
       "workspace": "DESA_WRKSPC_CICD",
-      "applicationId": "302",
+      "applicationId": "102",
       "applicationAlias": "DESA_ALIAS"
     },
     "test": {

@@ -5,7 +5,7 @@
     name: Navigation Menu
 
   subscription: 
-    version-number: 67875492
+    version-number: 67916145
 
   source: 
     type: Static Values
@@ -164,6 +164,33 @@
       target: 
         url: 'f?p=&APP_ID.:9:&APP_SESSION.::&DEBUG.:::'
         page: 9 # FORM_USERS
+
+    click-counting: 
+      count-clicks: false
+
+    user-defined-attributes: 
+      translatable: false
+
+  - # ====== Entry: BLANK_PAGE ===================================
+    id: 37966455685660341
+    label: 
+      label: BLANK_PAGE
+
+    icon: 
+      image/icon-css-classes: fa-file-o
+
+    layout: 
+      sequence: 70
+
+    is-current: 
+      type: Pages
+      pages: 
+      - 6
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:6:&APP_SESSION.::&DEBUG.:::'
+        page: 6 # BLANK_PAGE
 
     click-counting: 
       count-clicks: false
