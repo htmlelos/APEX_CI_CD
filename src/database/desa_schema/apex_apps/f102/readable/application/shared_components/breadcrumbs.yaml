@@ -61,3 +61,17 @@
         url: 'f?p=&APP_ID.:4:&APP_SESSION.::&DEBUG.:::'
         page: 4 # DETAIL_PAGE
 
+  - # ====== Entry: USERS_LISTS ==================================
+    id: 37765297210688584
+    identification: 
+      name: USERS_LISTS
+      page-number: 8
+
+    execution: 
+      sequence: 10
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:8:&APP_SESSION.::&DEBUG.:::'
+        page: 8 # USERS_LISTS
+

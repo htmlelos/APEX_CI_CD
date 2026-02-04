@@ -1,0 +1,335 @@
+pipeline {
+    agent any
+    
+    environment {
+        ORACLE_CONTAINER = "oracle-db"
+        SQLCL_PATH       = "/opt/sqlcl/bin/sql"
+        DB_CONN_STR      = "localhost:1521/FREEPDB1"
+        BUILD_DIR        = "/tmp/apex_project"
+        MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
+        
+        // SONAR_SCANNER_HOME = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+        SONAR_SCANNER_BIN = "/var/jenkins_home/tools/hudson.plugins.sonar.SonarRunnerInstallation/SonarScanner/bin/sonar-scanner"
+        SONAR_PROJECT_KEY = "apex-project-${env.BRANCH_NAME}"
+        SONAR_PROJECT_NAME = "APEX Project - ${env.BRANCH_NAME}"
+    }
+    
+    triggers {
+        githubPush()
+    }
+    
+    options {
+        skipDefaultCheckout()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    stages {
+        stage('Initialize') {
+        steps {
+            deleteDir()
+            checkout scm
+        }
+    }
+
+    stage('Pre-flight Checks') {
+        steps {
+            script {
+                echo "=== Verificando Conectividad con Docker ==="
+                sh "docker ps -q --filter name=${env.ORACLE_CONTAINER} || (echo 'ERROR: Contenedor ${env.ORACLE_CONTAINER} no encontrado' && exit 1)"
+            }
+        }
+    }
+    
+    stage('SonarQube Analysis') {
+        when { branch 'develop' }
+        steps {
+            script {
+                echo "=== Análisis de Código con SonarQube (Solo Develop) ==="
+                withSonarQubeEnv('SonarQube') {
+                    sh """
+                        ${SONAR_SCANNER_BIN} \
+                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                            -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
+                            -Dsonar.projectVersion=${BUILD_NUMBER} \
+                            -Dsonar.sources=. \
+                            -Dsonar.inclusions=**/*.sql,**/*.pks,**/*.pkb,**/*.fnc,**/*.prc,**/*.trg \
+                            -Dsonar.exclusions=**/node_modules/**,**/target/**,**/artifact/**,dist/**,src/database/desa_schema/apex_apps/** \
+                            -Dsonar.plsql.file.suffixes=sql,pks,pkb,fnc,prc,trg \
+                            -Dsonar.language=plsql \
+                            -Dsonar.sourceEncoding=UTF-8 \
+                            -Dsonar.working.directory=${WORKSPACE}/sonar-reports
+                    """
+                }
+            }
+        }
+    }
+    
+    stage('Quality Gate') {
+        when { branch 'develop' }
+        steps {
+            script {
+                echo "=== Esperando resultado de Quality Gate (Webhook) ==="
+                timeout(time: 10, unit: 'MINUTES') {
+                    def qg = waitForQualityGate()
+                    if (qg.status != 'OK') {
+                        error "El análisis de calidad no pasó los umbrales: ${qg.status}"
+                    }
+                }
+            }
+        }
+    }
+
+    stage('Generate Artifact') {
+        environment {
+            DB = credentials('apex-dev-credential')
+        }
+        steps {
+            script {
+                echo "=== Generando Artefacto usando contenedor Oracle ==="
+                
+                // 1. Sincronizar el código usando TAR para asegurar .git y archivos ocultos
+                sh """
+                    # Crear tarball en /tmp para evitar self-inclusion
+                    tar -cf /tmp/project.tar -C ${WORKSPACE} .
+                    
+                    # Asegurar directorio y copiar al contenedor
+                    docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
+                    docker cp /tmp/project.tar ${ORACLE_CONTAINER}:/tmp/
+                    
+                    # Extraer dentro del contenedor y ajustar permisos
+                    docker exec -u root ${ORACLE_CONTAINER} bash -c "
+                        rm -rf ${BUILD_DIR}/* ${BUILD_DIR}/.* 2>/dev/null || true
+                        tar -xf /tmp/project.tar -C ${BUILD_DIR}
+                        chown -R oracle: ${BUILD_DIR}
+                        rm /tmp/project.tar
+                    "
+                    
+                    # Limpiar en Jenkins
+                    rm /tmp/project.tar
+                """
+
+                // 2. Ejecutar SQLcl dentro del contenedor
+                sh """
+                    docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" -e BRANCH_NAME="\$BRANCH_NAME" ${ORACLE_CONTAINER} bash -c "
+                        cd ${BUILD_DIR}
+                        
+                        echo '=== Verificando y Estabilizando Git ==='
+                        git config --global --add safe.directory ${BUILD_DIR}
+                        git config --global user.email 'jenkins@ci.local'
+                        git config --global user.name 'Jenkins CI'
+                        
+                        # Asegurar que tenemos las ramas necesarias
+                        git fetch origin main || echo 'Main no existe en origin'
+                        git checkout ${BRANCH_NAME} || git checkout -B ${BRANCH_NAME}
+                        
+                        echo '=== Estado de Git ==='
+                        git branch -a
+                        git log --oneline -n 3
+                        echo '===================================='
+                        
+                        echo '=== Generando Artefacto con SQLcl ==='
+                        ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
+                        WHENEVER SQLERROR EXIT SQL.SQLCODE
+                        WHENEVER OSERROR EXIT FAILURE
+                        -- Forzar configuración del proyecto
+                        project config set -name sqlcl.version -value 25.4.0.0
+                        project config set -name sqlcl.connectionName -value \${BRANCH_NAME}
+                        
+                        -- Generar artefacto
+                        project stage
+                        project gen-artifact -name app-\${BRANCH_NAME} -version ${BUILD_NUMBER}
+                        exit
+EOF
+                    "
+                """
+                
+                // 3. Traer el artefacto de vuelta
+                sh "mkdir -p artifact"
+                sh "docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
+            }
+        }
+    }
+
+    stage('Deploy to DEV') {
+        when { branch 'develop' }
+        environment {
+            DB = credentials('apex-dev-credential')
+        }
+        steps {
+            script {
+                echo "=== Desplegando a Desarrollo ==="
+                def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
+                if (!artifactFile) error "No se encontró artefacto ZIP"
+                
+                sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
+
+                sh """
+                    docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                        cd ${BUILD_DIR}
+                        ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
+                        WHENEVER SQLERROR EXIT SQL.SQLCODE
+                        WHENEVER OSERROR EXIT FAILURE
+
+                        project deploy -file /tmp/deploy_app.zip -connection develop
+                        exit
+EOF
+                    "
+                """
+            }
+        }
+    }
+
+    stage('Verify Dev Deployment') {
+        when { branch 'develop' }
+        environment {
+            DB = credentials('apex-dev-credential')
+        }
+        steps {
+            script {
+                echo "=== Verificando Aplicación en Desarrollo ==="
+                sh """
+                    docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                        ${SQLCL_PATH} -S "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
+                        SET PAGESIZE 50
+                        SET FEEDBACK OFF
+                        SELECT application_id, alias, workspace 
+                        FROM apex_applications 
+                        WHERE workspace = 'DESA_WRKSPC_CICD';
+                        exit
+EOF
+                    "
+                """
+            }
+        }
+    }
+
+    stage('Deploy to TEST') {
+        when { branch 'test' }
+        environment {
+            DB = credentials('apex-test-credential')
+        }
+        steps {
+            script {
+                echo "=== Desplegando a TEST ==="
+                def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
+                if (!artifactFile) error "No se encontró artefacto ZIP"
+
+                sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
+                
+                sh """
+                    docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                        cd ${BUILD_DIR}
+                        
+                        ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
+                        WHENEVER SQLERROR EXIT SQL.SQLCODE
+                        WHENEVER OSERROR EXIT FAILURE
+                        SET DEFINE ON
+                        
+                        -- Configurar versión de SQLcl
+                        project config set -name sqlcl.version -value 25.4.0.0
+                        
+                        project deploy -file /tmp/deploy_app.zip -connection test
+                        exit
+EOF
+                    "
+                """
+            }
+        }
+    }
+
+    stage('Verify Test Deployment') {
+        when { branch 'test' }
+        environment {
+            DB = credentials('apex-test-credential')
+        }
+        steps {
+            script {
+                echo "=== Verificando Aplicación en TEST ==="
+                sh """
+                    docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                        ${SQLCL_PATH} -S "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
+                        SET PAGESIZE 50
+                        SET FEEDBACK OFF
+                        SELECT application_id, alias, workspace 
+                        FROM apex_applications 
+                        WHERE workspace = 'TEST_WRKSPC_CICD';
+                        exit
+EOF
+                    "
+                """
+            }
+        }
+    }
+    stage('Playwright Tests') {
+        when { branch 'test' }
+        steps {
+            script {
+                echo "=== Ejecutando Pruebas de UI con Playwright ==="
+                // Usamos la imagen oficial para asegurar consistencia
+                docker.image('mcr.microsoft.com/playwright:v1.40.0-jammy').inside {
+                    sh """
+                        npm install
+                        APEX_TEST_URL="http://localhost:8181/ords/r/test_wrkspc_cicd/app-cicd"
+                    """
+                }
+            }
+        }
+        post {
+            always {
+                publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'playwright-report',
+                    reportFiles: 'index.html',
+                    reportName: 'Playwright HTML Report',
+                    reportTitles: 'Resultados de Pruebas Playwright'
+                ])
+                archiveArtifacts artifacts: 'playwright-report/**', allowEmptyArchive: true
+            }
+        }
+    }
+    
+    }
+
+    post {
+        success {
+            script {
+                echo "=== INICIANDO ENVÍO DE CORREO DE ÉXITO ==="
+                echo "Destinatarios: ${env.MAIL_RECIPIENTS}"
+                echo "Job: ${env.JOB_NAME}"
+                echo "Build: ${env.BUILD_NUMBER}"
+                
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Success: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} fue exitosa.\n\nVer detalles en: ${env.BUILD_URL}"
+                    echo "✅ Correo enviado exitosamente"
+                } catch (Exception e) {
+                    echo "❌ ERROR enviando correo: ${e.message}"
+                    echo "Stack trace: ${e}"
+                }
+            }
+        }
+        failure {
+            script {
+                echo "=== INICIANDO ENVÍO DE CORREO DE FALLO ==="
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Failure: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} ha fallado.\n\nVer consola: ${env.BUILD_URL}console"
+                    echo "✅ Correo de fallo enviado exitosamente"
+                } catch (Exception e) {
+                    echo "❌ ERROR enviando correo de fallo: ${e.message}"
+                }
+            }
+        }
+        always {
+            script {
+                sh "docker exec -u root ${env.ORACLE_CONTAINER} rm -rf ${env.BUILD_DIR} /tmp/deploy_app.zip || true"
+                archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
+            }
+        }
+    }
+}
