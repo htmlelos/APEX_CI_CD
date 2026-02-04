@@ -419,6 +419,34 @@ buttons:
     show-processing: false
     warn-on-unsaved-changes: Do Not Check
 
+- # ====== Button: CLOSE =======================================
+  id: 28907771222341927
+  identification: 
+    button-name: CLOSE
+    label: Close
+
+  layout: 
+    sequence: 10
+    region: BUTTON_CONTAINER # 28907317357341923
+    slot: CLOSE
+    start-new-layout: false
+    start-new-row: true
+    column: Automatic
+    new-column: true
+    column-span: Automatic
+
+  appearance: 
+    button-template: Text
+    hot: false
+    template-options: 
+    - '#DEFAULT#'
+
+  behavior: 
+    action: Submit Page
+    execute-validations: true
+    show-processing: false
+    warn-on-unsaved-changes: Do Not Check
+
 processes: 
 - # ====== Process: CARGAR_DATOS_USUARIO =======================
   id: 28906888488341918
