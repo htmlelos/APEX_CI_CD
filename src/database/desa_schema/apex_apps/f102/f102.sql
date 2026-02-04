@@ -40,7 +40,7 @@ prompt APPLICATION 102 - APP_CICD
 --       Items:                    7
 --       Processes:                5
 --       Regions:                 11
---       Buttons:                  4
+--       Buttons:                  5
 --     Shared Components:
 --       Logic:
 --         Build Options:          1
@@ -18329,6 +18329,7 @@ wwv_flow_imp_page.create_page(
 ,p_autocomplete_on_off=>'OFF'
 ,p_page_template_options=>'#DEFAULT#'
 ,p_protection_level=>'C'
+,p_page_component_map=>'17'
 );
 wwv_flow_imp_page.create_page_plug(
  p_id=>wwv_flow_imp.id(28906945868341919)
@@ -18364,6 +18365,17 @@ wwv_flow_imp_page.create_page_plug(
 ,p_menu_id=>wwv_flow_imp.id(33760834440704595)
 ,p_plug_source_type=>'NATIVE_BREADCRUMB'
 ,p_menu_template_id=>wwv_flow_imp.id(33939357192704692)
+);
+wwv_flow_imp_page.create_page_button(
+ p_id=>wwv_flow_imp.id(28907771222341927)
+,p_button_sequence=>10
+,p_button_plug_id=>wwv_flow_imp.id(28907317357341923)
+,p_button_name=>'CLOSE'
+,p_button_action=>'SUBMIT'
+,p_button_template_options=>'#DEFAULT#'
+,p_button_template_id=>wwv_flow_imp.id(33937773832704692)
+,p_button_image_alt=>'Close'
+,p_button_position=>'CLOSE'
 );
 wwv_flow_imp_page.create_page_button(
  p_id=>wwv_flow_imp.id(28907489174341924)
@@ -18690,4 +18702,4 @@ prompt  ...done
 
 
 
--- sqlcl_snapshot {"hash":"47fd331c9dcbbda3e0eec7db991ffdc01248e9c3","type":"APEX_APPLICATIONS","name":"f102","schemaName":"DESA_WRKSPC_CICD","sxml":""}
+-- sqlcl_snapshot {"hash":"8ac3bf993d75894684651a8e4090d60caabbb7d5","type":"APEX_APPLICATIONS","name":"f102","schemaName":"DESA_WRKSPC_CICD","sxml":""}
