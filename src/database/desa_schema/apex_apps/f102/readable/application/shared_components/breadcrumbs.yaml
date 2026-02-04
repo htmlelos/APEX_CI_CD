@@ -103,3 +103,17 @@
         url: 'f?p=&APP_ID.:6:&APP_SESSION.::&DEBUG.:::'
         page: 6 # BLANK_PAGE
 
+  - # ====== Entry: FEAT_!0 ======================================
+    id: 37969177000440648
+    identification: 
+      name: FEAT_!0
+      page-number: 7
+
+    execution: 
+      sequence: 10
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:7:&APP_SESSION.::&DEBUG.:::'
+        page: 7 # FEAT_!0
+

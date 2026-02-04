@@ -1,75 +1,64 @@
 {
-  "project": "APEX_CICD",
-  "sqlcl": {
-    "connectionName": "desa_schema@127.0.0.1:1522/FREEPDB1",
-    "version": "25.4.1.0"
+  "project" : "APEX_CICD",
+  "sqlcl" : {
+    "connectionName" : "desa_schema@127.0.0.1:1522/FREEPDB1",
+    "version" : "25.4.1.0"
   },
-  "connections": {
-    "develop": {
-      "schema": "DESA_SCHEMA",
-      "workspace": "DESA_WRKSPC_CICD",
-      "applicationId": "102",
-      "applicationAlias": "DESA_ALIAS"
+  "connections" : {
+    "develop" : {
+      "schema" : "DESA_SCHEMA",
+      "workspace" : "DESA_WRKSPC_CICD",
+      "applicationId" : "102",
+      "applicationAlias" : "DESA_ALIAS"
     },
-    "test": {
-      "schema": "TEST_SCHEMA",
-      "workspace": "TEST_WRKSPC_CICD",
-      "applicationId": "202",
-      "applicationAlias": "TEST_ALIAS"
+    "test" : {
+      "schema" : "TEST_SCHEMA",
+      "workspace" : "TEST_WRKSPC_CICD",
+      "applicationId" : "202",
+      "applicationAlias" : "TEST_ALIAS"
     }
   },
-  "schemas": [
-    "DESA_SCHEMA",
-    "TEST_SCHEMA"
-  ],
-  "lastReleaseVersion": "",
-  "export": {
-    "format": {
-      "enable": true
+  "schemas" : [ "DESA_SCHEMA", "TEST_SCHEMA" ],
+  "lastReleaseVersion" : "",
+  "export" : {
+    "format" : {
+      "enable" : true
     },
-    "setTransform": {
-      "collationClause": "NEVER",
-      "constraints": true,
-      "constraintsAsAlter": true,
-      "emitSchema": true,
-      "force": true,
-      "partitioning": false,
-      "segmentAttributes": false,
-      "sizeByteKeyword": true,
-      "sqlterminator": true,
-      "storage": false,
-      "tablespace": false
+    "setTransform" : {
+      "collationClause" : "NEVER",
+      "constraints" : true,
+      "constraintsAsAlter" : true,
+      "emitSchema" : true,
+      "force" : true,
+      "partitioning" : false,
+      "segmentAttributes" : false,
+      "sizeByteKeyword" : true,
+      "sqlterminator" : true,
+      "storage" : false,
+      "tablespace" : false
     },
-    "apex": {
-      "exptype": [
-        "READABLE_YAML",
-        "APPLICATION_SOURCE"
-      ],
-      "expAclAssignments": false,
-      "expComments": false,
-      "skipExportDate": true,
-      "expirNotif": false,
-      "expOriginalIds": false,
-      "expSavedReports": false,
-      "expPubReports": true,
-      "expSubscriptions": false,
-      "expSupportingObjects": "N",
-      "expTranslations": false,
-      "auditType": "NULL"
+    "apex" : {
+      "exptype" : [ "READABLE_YAML", "APPLICATION_SOURCE" ],
+      "expAclAssignments" : false,
+      "expComments" : false,
+      "skipExportDate" : true,
+      "expirNotif" : false,
+      "expOriginalIds" : false,
+      "expSavedReports" : false,
+      "expPubReports" : true,
+      "expSubscriptions" : false,
+      "expSupportingObjects" : "N",
+      "expTranslations" : false,
+      "auditType" : "NULL"
     }
   },
-  "git": {
-    "protectedBranches": [
-      "main",
-      "master"
-    ],
-    "defaultBranch": "main"
+  "git" : {
+    "protectedBranches" : [ "main", "master" ],
+    "defaultBranch" : "main"
   },
-  "stage": {
-    "excludeObjects": [
-      "ALL.user"
-    ],
-    "generatedFormat": "liquibase",
-    "softObjectIsolation": "change"
+  "stage" : {
+    "excludeObjects" : [ "ALL.user" ],
+    "generatedFormat" : "liquibase",
+    "softObjectIsolation" : "change"
   }
 }

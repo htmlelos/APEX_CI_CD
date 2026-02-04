@@ -133,11 +133,9 @@ pipeline {
                         ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
-                        -- Forzar configuración del proyecto
-                        project config set -name sqlcl.version -value 25.4.0.0
                         
-                        -- Generar artefacto (stage usa develop por defecto, por eso hicimos fetch de develop)
-                        project stage
+                        -- Generar artefacto especificando el ambiente para incluir su configuración
+                        project stage -environment develop
                         project gen-artifact -name app-\${BRANCH_NAME} -version ${BUILD_NUMBER}
                         exit
 EOF
@@ -225,10 +223,9 @@ EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
                         SET DEFINE ON
-                        
-                        -- Configurar versión de SQLcl
-                        project config set -name sqlcl.version -value 25.4.0.0
-                        
+
+                        -- Despliegue usando el ambiente 'test' definido en project.config.json
+                        -- SQLcl se encargará automáticamente del remapeo de Workspace e ApplicationID
                         project deploy -file /tmp/deploy_app.zip -environment test
                         exit
 EOF
@@ -268,11 +265,23 @@ EOF
                 echo "=== Ejecutando Pruebas de UI con Playwright ==="
                 // Usamos docker CLI en lugar del plugin para evitar problemas de dependencias
                 sh """
-                    docker run --rm \
-                        -v ${WORKSPACE}:/work \
-                        -w /work \
-                        mcr.microsoft.com/playwright:v1.40.0-jammy \
-                        /bin/bash -c "npm install && npx playwright test || echo 'Pruebas fallidas, analizando reportes'"
+                    # Limpiar por si quedó un contenedor previo
+                    docker rm -f playwright-runner 2>/dev/null || true
+                    
+                    # Crear el contenedor con el directorio de trabajo definido
+                    docker create --name playwright-runner -w /work mcr.microsoft.com/playwright:v1.40.0-jammy /bin/bash -c "npm install && npx playwright test"
+                    
+                    # Copiar el código al contenedor (el contenido del dir actual a /work)
+                    docker cp . playwright-runner:/work
+                    
+                    # Ejecutar las pruebas
+                    docker start -a playwright-runner || echo 'Pruebas fallidas, analizando reportes'
+                    
+                    # Traer los reportes de vuelta
+                    docker cp playwright-runner:/work/playwright-report . || true
+                    
+                    # Limpiar
+                    docker rm -f playwright-runner
                 """
             }
         }
