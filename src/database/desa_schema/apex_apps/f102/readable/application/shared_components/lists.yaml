@@ -5,7 +5,11 @@
     name: Navigation Menu
 
   subscription: 
+<<<<<<< HEAD
     version-number: 70148317
+=======
+    version-number: 70054083
+>>>>>>> origin/develop
 
   source: 
     type: Static Values
@@ -252,6 +256,7 @@
     user-defined-attributes: 
       translatable: false
 
+<<<<<<< HEAD
   - # ====== Entry: FEAT_12 ======================================
     id: 38351707963186122
     label: 
@@ -279,6 +284,8 @@
     user-defined-attributes: 
       translatable: false
 
+=======
+>>>>>>> origin/develop
 - # ====== List: Navigation Bar ================================
   id: 34050751739704849
   identification: 
