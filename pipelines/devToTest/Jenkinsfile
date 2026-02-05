@@ -133,10 +133,8 @@ pipeline {
                         ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
-                        -- Forzar configuración del proyecto
-                        project config set -name sqlcl.version -value 25.4.0.0
                         
-                        -- Generar artefacto (stage usa develop por defecto, por eso hicimos fetch de develop)
+                        -- Generar artefacto (SQLcl usará la conexión activa)
                         project stage
                         project gen-artifact -name app-\${BRANCH_NAME} -version ${BUILD_NUMBER}
                         exit
@@ -171,7 +169,9 @@ EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
 
-                        project deploy -file /tmp/deploy_app.zip -environment develop
+                        -- Activar ambiente de desarrollo para remapeo
+                        project config set -name sqlcl.connectionName -value develop
+                        project deploy -file /tmp/deploy_app.zip
                         exit
 EOF
                     "
@@ -225,11 +225,10 @@ EOF
                         WHENEVER SQLERROR EXIT SQL.SQLCODE
                         WHENEVER OSERROR EXIT FAILURE
                         SET DEFINE ON
-                        
-                        -- Configurar versión de SQLcl
-                        project config set -name sqlcl.version -value 25.4.0.0
-                        
-                        project deploy -file /tmp/deploy_app.zip -environment test
+
+                        -- Activar ambiente de test para remapeo automático (Workspace e App ID)
+                        project config set -name sqlcl.connectionName -value test
+                        project deploy -file /tmp/deploy_app.zip
                         exit
 EOF
                     "
@@ -268,11 +267,23 @@ EOF
                 echo "=== Ejecutando Pruebas de UI con Playwright ==="
                 // Usamos docker CLI en lugar del plugin para evitar problemas de dependencias
                 sh """
-                    docker run --rm \
-                        -v ${WORKSPACE}:/work \
-                        -w /work \
-                        mcr.microsoft.com/playwright:v1.40.0-jammy \
-                        /bin/bash -c "npm install && npx playwright test || echo 'Pruebas fallidas, analizando reportes'"
+                    # Limpiar contenedores previos
+                    docker rm -f playwright-runner 2>/dev/null || true
+                    
+                    # Crear contenedor (sin montar volúmenes para evitar problemas de permisos en Jenkins)
+                    docker create --name playwright-runner -w /work mcr.microsoft.com/playwright:v1.40.0-jammy /bin/bash -c "npm install && npx playwright test"
+                    
+                    # Copiar el proyecto al contenedor
+                    docker cp . playwright-runner:/work
+                    
+                    # Ejecutar pruebas
+                    docker start -a playwright-runner || echo 'Pruebas con fallos detectados'
+                    
+                    # Extraer resultados
+                    docker cp playwright-runner:/work/playwright-report . || true
+                    
+                    # Limpiar
+                    docker rm -f playwright-runner
                 """
             }
         }
