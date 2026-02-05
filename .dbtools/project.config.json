@@ -8,14 +8,14 @@
     "develop": {
       "schema": "DESA_SCHEMA",
       "workspace": "DESA_WRKSPC_CICD",
-      "applicationId": "102",
-      "applicationAlias": "DESA_ALIAS"
+      "appId": "102",
+      "alias": "DESA_ALIAS"
     },
     "test": {
       "schema": "TEST_SCHEMA",
       "workspace": "TEST_WRKSPC_CICD",
-      "applicationId": "202",
-      "applicationAlias": "TEST_ALIAS"
+      "appId": "102",
+      "alias": "TEST_ALIAS"
     }
   },
   "schemas": [
