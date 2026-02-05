@@ -2,7 +2,11 @@
   "project": "APEX_CICD",
   "sqlcl": {
     "connectionName": "desa_schema@127.0.0.1:1522/FREEPDB1",
+<<<<<<< Updated upstream
     "version": "25.4.0.0"
+=======
+    "version": "25.4.1.0"
+>>>>>>> Stashed changes
   },
   "connections": {
     "develop": {
