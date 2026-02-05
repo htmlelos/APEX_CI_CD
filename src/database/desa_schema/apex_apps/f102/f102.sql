@@ -36,10 +36,10 @@ prompt APPLICATION 102 - APP_CICD
 --   Exported By:     DESA_SCHEMA
 --   Flashback:       0
 --   Export Type:     Application Export
---     Pages:                     12
+--     Pages:                     13
 --       Items:                    7
 --       Processes:                5
---       Regions:                 14
+--       Regions:                 15
 --       Buttons:                  5
 --     Shared Components:
 --       Logic:
@@ -47,7 +47,7 @@ prompt APPLICATION 102 - APP_CICD
 --       Navigation:
 --         Lists:                  2
 --         Breadcrumbs:            1
---           Entries:              9
+--           Entries:             10
 --       Security:
 --         Authentication:         1
 --         Authorization:          1
@@ -150,7 +150,7 @@ wwv_flow_imp_shared.create_list(
  p_id=>wwv_flow_imp.id(33761322535704598)
 ,p_name=>'Navigation Menu'
 ,p_list_status=>'PUBLIC'
-,p_version_scn=>70054083
+,p_version_scn=>70148317
 );
 wwv_flow_imp_shared.create_list_item(
  p_id=>wwv_flow_imp.id(34061341255704905)
@@ -231,6 +231,15 @@ wwv_flow_imp_shared.create_list_item(
 ,p_list_item_icon=>'fa-file-o'
 ,p_list_item_current_type=>'COLON_DELIMITED_PAGE_LIST'
 ,p_list_item_current_for_pages=>'10'
+);
+wwv_flow_imp_shared.create_list_item(
+ p_id=>wwv_flow_imp.id(38351707963186122)
+,p_list_item_display_sequence=>100
+,p_list_item_link_text=>'FEAT_12'
+,p_list_item_link_target=>'f?p=&APP_ID.:11:&APP_SESSION.::&DEBUG.:::'
+,p_list_item_icon=>'fa-file-o'
+,p_list_item_current_type=>'COLON_DELIMITED_PAGE_LIST'
+,p_list_item_current_for_pages=>'11'
 );
 end;
 /
@@ -985,6 +994,12 @@ wwv_flow_imp_shared.create_menu_option(
 ,p_short_name=>'FEAT_11'
 ,p_link=>'f?p=&APP_ID.:10:&APP_SESSION.::&DEBUG.:::'
 ,p_page_id=>10
+);
+wwv_flow_imp_shared.create_menu_option(
+ p_id=>wwv_flow_imp.id(38352637628186130)
+,p_short_name=>'FEAT_12'
+,p_link=>'f?p=&APP_ID.:11:&APP_SESSION.::&DEBUG.:::'
+,p_page_id=>11
 );
 end;
 /
@@ -18606,6 +18621,32 @@ wwv_flow_imp_page.create_page_plug(
 );
 end;
 /
+prompt --application/pages/page_00011
+begin
+wwv_flow_imp_page.create_page(
+ p_id=>11
+,p_name=>'FEAT_12'
+,p_alias=>'FEAT-12'
+,p_step_title=>'FEAT_12'
+,p_autocomplete_on_off=>'OFF'
+,p_page_template_options=>'#DEFAULT#'
+,p_protection_level=>'C'
+,p_page_component_map=>'11'
+);
+wwv_flow_imp_page.create_page_plug(
+ p_id=>wwv_flow_imp.id(38352113786186125)
+,p_plug_name=>'Breadcrumb'
+,p_region_template_options=>'#DEFAULT#:t-BreadcrumbRegion--useBreadcrumbTitle'
+,p_component_template_options=>'#DEFAULT#'
+,p_plug_template=>wwv_flow_imp.id(33833977455704646)
+,p_plug_display_sequence=>10
+,p_plug_display_point=>'REGION_POSITION_01'
+,p_menu_id=>wwv_flow_imp.id(33760834440704595)
+,p_plug_source_type=>'NATIVE_BREADCRUMB'
+,p_menu_template_id=>wwv_flow_imp.id(33939357192704692)
+);
+end;
+/
 prompt --application/pages/page_09999
 begin
 wwv_flow_imp_page.create_page(
@@ -18825,4 +18866,4 @@ prompt  ...done
 
 
 
--- sqlcl_snapshot {"hash":"40d70e1585b5b5120536f2c66a2695503dc7c619","type":"APEX_APPLICATIONS","name":"f102","schemaName":"DESA_WRKSPC_CICD","sxml":""}
+-- sqlcl_snapshot {"hash":"254697f27beab85bc6f652c09f50b66c89c02524","type":"APEX_APPLICATIONS","name":"f102","schemaName":"DESA_WRKSPC_CICD","sxml":""}

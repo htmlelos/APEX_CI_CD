@@ -14,13 +14,22 @@
     "test": {
       "schema": "TEST_SCHEMA",
       "workspace": "TEST_WRKSPC_CICD",
-      "appId": "102",
+      "applicationId": "202",
+      "applicationAlias": "TEST_ALIAS",
+      "appId": "202",
       "alias": "TEST_ALIAS"
+    },
+    "prod": {
+      "schema": "PROD_SCHEMA",
+      "workspace": "PROD_WRKSPC_CICD",
+      "appId": "302",
+      "alias": "PROD_ALIAS"
     }
   },
   "schemas": [
     "DESA_SCHEMA",
-    "TEST_SCHEMA"
+    "TEST_SCHEMA",
+    "PROD_SCHEMA"
   ],
   "lastReleaseVersion": "",
   "export": {

@@ -131,3 +131,17 @@
         url: 'f?p=&APP_ID.:10:&APP_SESSION.::&DEBUG.:::'
         page: 10 # FEAT_11
 
+  - # ====== Entry: FEAT_12 ======================================
+    id: 38352637628186130
+    identification: 
+      name: FEAT_12
+      page-number: 11
+
+    execution: 
+      sequence: 10
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:11:&APP_SESSION.::&DEBUG.:::'
+        page: 11 # FEAT_12
+
