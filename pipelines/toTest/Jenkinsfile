@@ -1,0 +1,92 @@
+pipeline {
+    agent any
+    
+    environment {
+        ORACLE_CONTAINER = "oracle-db"
+        SQLCL_PATH       = "/opt/sqlcl/bin/sql"
+        DB_CONN_STR      = "localhost:1521/FREEPDB1"
+        BUILD_DIR        = "/tmp/apex_project"
+        DB_USR           = "TEST_SCHEMA"
+        // La URL de APEX en TEST proporcionada por el usuario
+        APEX_TEST_URL    = "http://localhost:8181/ords/r/test_wrkspc_cicd/app-ci-cd" 
+    }
+
+    stages {
+        stage('Initialize') {
+            steps {
+                deleteDir()
+                checkout scm
+            }
+        }
+
+        stage('Generate Artifact') {
+            environment {
+                DB = credentials('apex-test-credential')
+            }
+            steps {
+                script {
+                    echo "=== Generando Artefacto para TEST ==="
+                    sh """
+                        tar -cf /tmp/project.tar -C ${WORKSPACE} .
+                        docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
+                        docker cp /tmp/project.tar ${ORACLE_CONTAINER}:/tmp/
+                        docker exec -u root ${ORACLE_CONTAINER} bash -c "
+                            rm -rf ${BUILD_DIR}/* ${BUILD_DIR}/.* 2>/dev/null || true
+                            tar -xf /tmp/project.tar -C ${BUILD_DIR}
+                            chown -R oracle: ${BUILD_DIR}
+                            rm /tmp/project.tar
+                        "
+                        rm /tmp/project.tar
+                    """
+
+                    sh """
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                            cd ${BUILD_DIR}
+                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
+                            WHENEVER SQLERROR EXIT SQL.SQLCODE
+                            WHENEVER OSERROR EXIT FAILURE
+                            project stage
+                            project gen-artifact -name app-test -version ${BUILD_NUMBER}
+                            exit
+EOF
+                        "
+                    """
+                    sh "mkdir -p artifact && docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
+                }
+            }
+        }
+
+        stage('Deploy to TEST') {
+            environment {
+                DB = credentials('apex-test-credential')
+            }
+            steps {
+                script {
+                    echo "=== Desplegando a TEST (Esquema: ${DB_USR}) ==="
+                    def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
+                    sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
+                    sh """
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                            cd ${BUILD_DIR}
+                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
+                            WHENEVER SQLERROR EXIT SQL.SQLCODE
+                            WHENEVER OSERROR EXIT FAILURE
+                            project config set -name sqlcl.connectionName -value test
+                            project deploy -file /tmp/deploy_app.zip
+                            exit
+EOF
+                        "
+                    """
+                }
+            }
+        }
+
+    }
+    
+    post {
+        always {
+            archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
+            sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} /tmp/deploy_app.zip || true"
+        }
+    }
+}
