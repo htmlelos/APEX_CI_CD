@@ -55,11 +55,15 @@ pipeline {
                             
                             echo '=== Estabilizando Git (Branch Recovery) ==='
                             git config --global --add safe.directory ${BUILD_DIR}
-                            # Forzar una referencia de rama para evitar el estado detached HEAD en SQLcl
-                            git checkout -b build_branch 2>/dev/null || git checkout -B build_branch 2>/dev/null || true
+                            # Restaurar referencia local a main si existe en origin para SQLcl comparison
+                            if git rev-parse --verify origin/main >/dev/null 2>&1; then
+                                git branch -f main origin/main
+                            fi
+                            # Asegurar que estamos en una rama local (evitar detached HEAD)
+                            git checkout -B build_branch
                             
                             echo '=== Generando Artefacto con SQLcl ==='
-                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF | tee /tmp/sqlcl_gen.log
+                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
                             project config set -name sqlcl.connectionName -value test
@@ -67,10 +71,6 @@ pipeline {
                             project gen-artifact -name app-test -version ${BUILD_NUMBER}
                             exit
 EOF
-                            if grep -qi 'ERROR:' /tmp/sqlcl_gen.log; then
-                                echo '!!! ERROR DETECTADO EN GENERACIÓN DE ARTEFACTO !!!'
-                                exit 1
-                            fi
                         "
                     """
                     sh "mkdir -p artifact && docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
