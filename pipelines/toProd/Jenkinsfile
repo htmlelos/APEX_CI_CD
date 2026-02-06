@@ -53,10 +53,13 @@ pipeline {
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                             cd ${BUILD_DIR}
                             
-                            echo '=== Configurando Estabilidad de Git en Contenedor ==='
+                            echo '=== Estabilizando Git (Branch Recovery) ==='
                             git config --global --add safe.directory ${BUILD_DIR}
-                            
-                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
+                            # Forzar una referencia de rama para evitar el estado detached HEAD en SQLcl
+                            git checkout -b build_branch 2>/dev/null || git checkout -B build_branch 2>/dev/null || true
+
+                            echo '=== Generando Artefacto Pro con SQLcl ==='
+                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF | tee /tmp/sqlcl_gen.log
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
                             project config set -name sqlcl.connectionName -value prod
@@ -64,6 +67,10 @@ pipeline {
                             project gen-artifact -name app-prod -version ${BUILD_NUMBER}
                             exit
 EOF
+                            if grep -qi 'ERROR:' /tmp/sqlcl_gen.log; then
+                                echo '!!! ERROR DETECTADO EN GENERACIÓN DE ARTEFACTO !!!'
+                                exit 1
+                            fi
                         "
                     """
                     sh "mkdir -p artifact && docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
@@ -111,13 +118,18 @@ EOF
                     sh """
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                             cd ${BUILD_DIR}
-                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
+                            echo '=== Desplegando Artefacto Pro con SQLcl ==='
+                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF | tee /tmp/sqlcl_deploy.log
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
                             project config set -name sqlcl.connectionName -value prod
                             project deploy -file /tmp/deploy_app.zip
                             exit
 EOF
+                            if grep -qi 'ERROR:' /tmp/sqlcl_deploy.log; then
+                                echo '!!! ERROR DETECTADO EN EL DESPLIEGUE !!!'
+                                exit 1
+                            fi
                         "
                     """
                 }
