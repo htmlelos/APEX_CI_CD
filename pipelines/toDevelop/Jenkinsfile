@@ -14,7 +14,7 @@ pipeline {
     environment {
         ORACLE_CONTAINER = "oracle-db"
         SQLCL_PATH       = "/opt/sqlcl/bin/sql"
-        DB_CONN_STR      = "localhost:1522/FREEPDB1"
+        DB_CONN_STR      = "localhost:1521/FREEPDB1"
         BUILD_DIR        = "/tmp/apex_project_desa"
         DB_USR           = "DESA_SCHEMA"
         MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
