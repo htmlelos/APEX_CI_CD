@@ -14,7 +14,7 @@ pipeline {
     environment {
         ORACLE_CONTAINER = "oracle-db"
         SQLCL_PATH       = "/opt/sqlcl/bin/sql"
-        DB_CONN_STR      = "localhost:1522/FREEPDB1"
+        DB_CONN_STR      = "localhost:1521/FREEPDB1"
         BUILD_DIR        = "/tmp/apex_project_desa"
         DB_USR           = "DESA_SCHEMA"
         MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
@@ -71,11 +71,16 @@ pipeline {
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                             cd ${BUILD_DIR}
                             
-                            echo '=== Verificando y Estabilizando Git en Contenedor ==='
+                            echo '=== Estabilizando Git (Branch Recovery) ==='
                             git config --global --add safe.directory ${BUILD_DIR}
-                            git config --global user.email 'jenkins@ci.local'
-                            git config --global user.name 'Jenkins CI'
-                            
+                            # Restaurar referencia local a main si existe en origin para SQLcl comparison
+                            if git rev-parse --verify origin/main >/dev/null 2>&1; then
+                                git branch -f main origin/main
+                            fi
+                            # Asegurar que estamos en una rama local (evitar detached HEAD)
+                            git checkout -B build_branch
+
+                            echo '=== Generando Artefacto con SQLcl ==='
                             ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
@@ -89,8 +94,6 @@ EOF
                 }
             }
         }
-
-        // Stage 'Deploy to DESA' eliminado por ser redundante (el desarrollo se hace en el esquema DESA)
     }
     
     post {
