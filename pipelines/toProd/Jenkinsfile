@@ -52,9 +52,14 @@ pipeline {
                     sh """
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                             cd ${BUILD_DIR}
+                            
+                            echo '=== Configurando Estabilidad de Git en Contenedor ==='
+                            git config --global --add safe.directory ${BUILD_DIR}
+                            
                             ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
+                            project config set -name sqlcl.connectionName -value prod
                             project stage
                             project gen-artifact -name app-prod -version ${BUILD_NUMBER}
                             exit
