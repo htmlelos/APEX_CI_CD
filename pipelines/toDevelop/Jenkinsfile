@@ -71,11 +71,16 @@ pipeline {
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                             cd ${BUILD_DIR}
                             
-                            echo '=== Verificando y Estabilizando Git en Contenedor ==='
+                            echo '=== Estabilizando Git (Branch Recovery) ==='
                             git config --global --add safe.directory ${BUILD_DIR}
-                            git config --global user.email 'jenkins@ci.local'
-                            git config --global user.name 'Jenkins CI'
-                            
+                            # Restaurar referencia local a main si existe en origin para SQLcl comparison
+                            if git rev-parse --verify origin/main >/dev/null 2>&1; then
+                                git branch -f main origin/main
+                            fi
+                            # Asegurar que estamos en una rama local (evitar detached HEAD)
+                            git checkout -B build_branch
+
+                            echo '=== Generando Artefacto con SQLcl ==='
                             ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
