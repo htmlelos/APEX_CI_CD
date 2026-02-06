@@ -47,10 +47,9 @@ pipeline {
                 }
             }
         }
-
         stage('Generate Artifact') {
             environment {
-                DB = credentials('apex-desa-credential')
+                DB = credentials('apex-dev-credential')
             }
             steps {
                 script {
@@ -90,42 +89,17 @@ EOF
                 }
             }
         }
-
-        stage('Deploy to DESA') {
-            environment {
-                DB = credentials('apex-desa-credential')
-            }
-            steps {
-                script {
-                    echo "=== Desplegando a DESA (Esquema: ${DB_USR}) ==="
-                    def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
-                    sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app_desa.zip"
-                    sh """
-                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
-                            cd ${BUILD_DIR}
-                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
-                            WHENEVER SQLERROR EXIT SQL.SQLCODE
-                            WHENEVER OSERROR EXIT FAILURE
-                            project config set -name sqlcl.connectionName -value develop
-                            project deploy -file /tmp/deploy_app_desa.zip
-                            exit
-EOF
-                        "
-                    """
-                }
-            }
-        }
     }
-
+    
     post {
         success {
             script {
                 try {
                     mail to: "${env.MAIL_RECIPIENTS}",
                          subject: "Success: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} fue exitosa.\n\nVer detalles en: ${env.BUILD_URL}"
+                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} fue exitosa.\nAnálisis SonarQube completado y Artefacto generado.\n\nVer detalles en: ${env.BUILD_URL}"
                 } catch (Exception e) {
-                    echo "Error enviando correo: \${e.message}"
+                    echo "Error enviando correo: ${e.message}"
                 }
             }
         }
@@ -136,13 +110,13 @@ EOF
                          subject: "Failure: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                          body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} ha fallado.\n\nVer consola: ${env.BUILD_URL}console"
                 } catch (Exception e) {
-                    echo "Error enviando correo de fallo: \${e.message}"
+                    echo "Error enviando correo de fallo: ${e.message}"
                 }
             }
         }
         always {
             archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
-            sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} /tmp/deploy_app_desa.zip || true"
+            sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} || true"
         }
     }
 }
