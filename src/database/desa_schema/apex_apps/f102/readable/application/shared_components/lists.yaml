@@ -5,7 +5,11 @@
     name: Navigation Menu
 
   subscription: 
+<<<<<<< HEAD
+    version-number: 70148317
+=======
     version-number: 70054083
+>>>>>>> origin/develop
 
   source: 
     type: Static Values
@@ -252,6 +256,36 @@
     user-defined-attributes: 
       translatable: false
 
+<<<<<<< HEAD
+  - # ====== Entry: FEAT_12 ======================================
+    id: 38351707963186122
+    label: 
+      label: FEAT_12
+
+    icon: 
+      image/icon-css-classes: fa-file-o
+
+    layout: 
+      sequence: 100
+
+    is-current: 
+      type: Pages
+      pages: 
+      - 11
+
+    link: 
+      target: 
+        url: 'f?p=&APP_ID.:11:&APP_SESSION.::&DEBUG.:::'
+        page: 11 # FEAT_12
+
+    click-counting: 
+      count-clicks: false
+
+    user-defined-attributes: 
+      translatable: false
+
+=======
+>>>>>>> origin/develop
 - # ====== List: Navigation Bar ================================
   id: 34050751739704849
   identification: 

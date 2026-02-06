@@ -1,0 +1,151 @@
+pipeline {
+    agent any
+    
+    triggers {
+        githubPush()
+    }
+
+    options {
+        skipDefaultCheckout()
+        timeout(time: 60, unit: 'MINUTES') // Más tiempo para PROD por las pruebas Playwright
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
+
+    environment {
+        ORACLE_CONTAINER = "oracle-db"
+        SQLCL_PATH       = "/opt/sqlcl/bin/sql"
+        DB_CONN_STR      = "localhost:1521/FREEPDB1"
+        BUILD_DIR        = "/tmp/apex_project_prod"
+        DB_USR           = "PROD_SCHEMA"
+        APEX_TEST_URL    = "http://localhost:8181/ords/r/test_wrkspc_cicd/app-ci-cd"
+        MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
+    }
+
+    stages {
+        stage('Initialize') {
+            steps {
+                deleteDir()
+                checkout scm
+            }
+        }
+
+        stage('Generate Production Artifact') {
+            environment {
+                DB = credentials('apex-prod-credential')
+            }
+            steps {
+                script {
+                    echo "=== Generando Artefacto para PRODUCCIÓN ==="
+                    sh """
+                        tar -cf /tmp/project.tar -C ${WORKSPACE} .
+                        docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
+                        docker cp /tmp/project.tar ${ORACLE_CONTAINER}:/tmp/
+                        docker exec -u root ${ORACLE_CONTAINER} bash -c "
+                            rm -rf ${BUILD_DIR}/* ${BUILD_DIR}/.* 2>/dev/null || true
+                            tar -xf /tmp/project.tar -C ${BUILD_DIR}
+                            chown -R oracle: ${BUILD_DIR}
+                            rm /tmp/project.tar
+                        "
+                        rm /tmp/project.tar
+                    """
+
+                    sh """
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                            cd ${BUILD_DIR}
+                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
+                            WHENEVER SQLERROR EXIT SQL.SQLCODE
+                            WHENEVER OSERROR EXIT FAILURE
+                            project stage
+                            project gen-artifact -name app-prod -version ${BUILD_NUMBER}
+                            exit
+EOF
+                        "
+                    """
+                    sh "mkdir -p artifact && docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
+                }
+            }
+        }
+
+        stage('Playwright Tests on TEST') {
+            steps {
+                script {
+                    echo "=== Ejecutando Playwright en ambiente de TEST antes de PROD ==="
+                    sh """
+                        docker rm -f playwright-runner 2>/dev/null || true
+                        docker create --name playwright-runner -w /work -e APEX_TEST_URL=${APEX_TEST_URL} mcr.microsoft.com/playwright:v1.40.0-jammy /bin/bash -c "npm install && npx playwright test"
+                        docker cp . playwright-runner:/work
+                        docker start -a playwright-runner
+                        docker cp playwright-runner:/work/playwright-report . || true
+                        docker rm -f playwright-runner
+                    """
+                }
+            }
+            post {
+                always {
+                    publishHTML([
+                        allowMissing: false,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'playwright-report',
+                        reportFiles: 'index.html',
+                        reportName: 'Playwright Staging Report'
+                    ])
+                }
+            }
+        }
+
+        stage('Deploy to PRODUCTION') {
+            environment {
+                DB = credentials('apex-prod-credential')
+            }
+            steps {
+                script {
+                    echo "=== Desplegando a PRODUCCIÓN (Esquema: ${DB_USR}) ==="
+                    def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
+                    sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
+                    sh """
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                            cd ${BUILD_DIR}
+                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
+                            WHENEVER SQLERROR EXIT SQL.SQLCODE
+                            WHENEVER OSERROR EXIT FAILURE
+                            project config set -name sqlcl.connectionName -value prod
+                            project deploy -file /tmp/deploy_app.zip
+                            exit
+EOF
+                        "
+                    """
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            script {
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Success: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "¡ÉXITO! El despliegue en PRODUCCIÓN del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} fue exitoso.\nLas pruebas de Playwright pasaron y el código está en PROD.\n\nVer detalles en: ${env.BUILD_URL}"
+                } catch (Exception e) {
+                    echo "Error enviando correo: ${e.message}"
+                }
+            }
+        }
+        failure {
+            script {
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Failure: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "CRÍTICO: La ejecución del pipeline de PRODUCCIÓN #${env.BUILD_NUMBER} ha fallado.\n\nVer consola: ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "Error enviando correo de fallo: ${e.message}"
+                }
+            }
+        }
+        always {
+            archiveArtifacts artifacts: 'artifact/*.zip, playwright-report/**', allowEmptyArchive: true
+            sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} || true"
+        }
+    }
+}
