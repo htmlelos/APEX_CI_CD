@@ -5,18 +5,25 @@ pipeline {
         githubPush()
     }
 
+    options {
+        skipDefaultCheckout()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
     environment {
         ORACLE_CONTAINER = "oracle-db"
         SQLCL_PATH       = "/opt/sqlcl/bin/sql"
         DB_CONN_STR      = "localhost:1522/FREEPDB1"
         BUILD_DIR        = "/tmp/apex_project_desa"
         DB_USR           = "DESA_SCHEMA"
+        MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
     }
 
     stages {
         stage('Initialize') {
             steps {
-                // deleteDir()
+                deleteDir()
                 checkout scm
             }
         }
@@ -24,11 +31,18 @@ pipeline {
         stage('Static Analysis') {
             steps {
                 script {
-                    def scannerHome = tool 'sonar-scanner'
+                    def scannerHome = tool 'SonarScanner'
                     withSonarQubeEnv('sonarqube') {
-                        sh "${scannerHome}/bin/sonar-scanner \
-                        -Dsonar.projectKey=web-app-feature \
-                        -Dsonar.sources=."
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=web-app-feature \
+                            -Dsonar.projectName="APEX Project - DESA" \
+                            -Dsonar.sources=. \
+                            -Dsonar.inclusions=**/*.sql,**/*.pks,**/*.pkb,**/*.fnc,**/*.prc,**/*.trg \
+                            -Dsonar.exclusions=**/node_modules/**,**/target/**,**/artifact/**,dist/**,src/database/desa_schema/apex_apps/** \
+                            -Dsonar.plsql.file.suffixes=sql,pks,pkb,fnc,prc,trg \
+                            -Dsonar.sourceEncoding=UTF-8
+                        """
                     }
                 }
             }
@@ -57,6 +71,12 @@ pipeline {
                     sh """
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                             cd ${BUILD_DIR}
+                            
+                            echo '=== Verificando y Estabilizando Git en Contenedor ==='
+                            git config --global --add safe.directory ${BUILD_DIR}
+                            git config --global user.email 'jenkins@ci.local'
+                            git config --global user.name 'Jenkins CI'
+                            
                             ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
@@ -98,6 +118,28 @@ EOF
     }
 
     post {
+        success {
+            script {
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Success: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} fue exitosa.\n\nVer detalles en: ${env.BUILD_URL}"
+                } catch (Exception e) {
+                    echo "Error enviando correo: \${e.message}"
+                }
+            }
+        }
+        failure {
+            script {
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Failure: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} ha fallado.\n\nVer consola: ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "Error enviando correo de fallo: \${e.message}"
+                }
+            }
+        }
         always {
             archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
             sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} /tmp/deploy_app_desa.zip || true"
