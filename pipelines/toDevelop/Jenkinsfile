@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    triggers {
+        githubPush()
+    }
+
     environment {
         ORACLE_CONTAINER = "oracle-db"
         SQLCL_PATH       = "/opt/sqlcl/bin/sql"
