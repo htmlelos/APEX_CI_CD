@@ -34,7 +34,7 @@ pipeline {
             steps {
                 script {
                     echo "=== Obteniendo último artifact exitoso de TEST ==="
-                    mkdir -p artifact
+                    sh "mkdir -p artifact"
                     copyArtifacts(
                         projectName: 'APEX-Deploy-TEST',
                         selector: lastSuccessful(),
