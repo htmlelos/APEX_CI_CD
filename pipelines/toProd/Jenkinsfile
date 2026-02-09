@@ -99,6 +99,12 @@ pipeline {
                             echo "WHENEVER SQLERROR EXIT SQL.SQLCODE" > deploy_script.sql
                             echo "WHENEVER OSERROR EXIT FAILURE" >> deploy_script.sql
                             echo "project config set -name sqlcl.connectionName -value prod" >> deploy_script.sql
+
+                            echo "=== Redefiniendo Workspace destino ==="
+                            WORKSPACE_NAME=\$(grep 'apex.102.workspace' dist/utils/properties/prod.properties | cut -d'=' -f2 | tr -d '\\r')
+                            echo \"BEGIN APEX_APPLICATION_INSTALL.SET_WORKSPACE('\${WORKSPACE_NAME}'); END;\" >> deploy_script.sql
+                            echo \"/\" >> deploy_script.sql
+
                             echo "project deploy -file /tmp/deploy_prod.zip -verbose" >> deploy_script.sql
                             echo "exit" >> deploy_script.sql
 
