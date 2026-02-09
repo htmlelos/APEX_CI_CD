@@ -34,7 +34,7 @@ pipeline {
                 script {
                     echo "=== Obteniendo Artefacto (.zip) desde DEVELOP ==="
                     // Esta sección es la que 'toma' el artefacto generado en toDevelop
-                    mkdir -p artifact
+                    sh "mkdir -p artifact"
                     copyArtifacts(
                         projectName: 'APEX-Deploy-Develop',
                         selector: lastSuccessful(),
