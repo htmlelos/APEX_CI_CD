@@ -93,8 +93,9 @@ pipeline {
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                             cd ${BUILD_DIR}
                             echo '=== Desplegando Artefacto con SQLcl ==='
-                            # Extraer flags -D para Liquibase
-                            D_FLAGS=\$(grep '=' dist/utils/properties/prod.properties | sed 's/^/-D/' | tr '\\n' ' ')
+                            # Extraer flags -D para Liquibase (Limpia CRLF y colapsa a una línea)
+                            D_FLAGS=\$(sed 's/\\r//' dist/utils/properties/prod.properties | grep '=' | sed 's/^/-D/' | xargs)
+                            echo \\"Usando parámetros: \$D_FLAGS\\"
                             ${SQLCL_PATH} \$D_FLAGS \\"\$DB_USR\\"/\\"\$DB_PSW\\"@${DB_CONN_STR} <<EOF
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE

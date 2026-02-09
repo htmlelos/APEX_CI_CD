@@ -63,8 +63,9 @@ pipeline {
                             git checkout -B build_branch
                             
                             echo '=== Generando Artefacto con SQLcl ==='
-                            # Extraer flags -D para Liquibase
-                            D_FLAGS=\$(grep '=' dist/utils/properties/test.properties | sed 's/^/-D/' | tr '\\n' ' ')
+                            # Extraer flags -D para Liquibase (Limpia CRLF y colapsa a una línea)
+                            D_FLAGS=\$(sed 's/\\r//' dist/utils/properties/test.properties | grep '=' | sed 's/^/-D/' | xargs)
+                            echo \\"Usando parámetros: \$D_FLAGS\\"
                             ${SQLCL_PATH} \$D_FLAGS \\"\$DB_USR\\"/\\"\$DB_PSW\\"@${DB_CONN_STR} <<EOF
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
@@ -94,8 +95,9 @@ EOF
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
                             cd ${BUILD_DIR}
                             echo '=== Desplegando Artefacto con SQLcl ==='
-                            # Extraer flags -D para Liquibase
-                            D_FLAGS=\$(grep '=' dist/utils/properties/test.properties | sed 's/^/-D/' | tr '\\n' ' ')
+                            # Extraer flags -D para Liquibase (Limpia CRLF y colapsa a una línea)
+                            D_FLAGS=\$(sed 's/\\r//' dist/utils/properties/test.properties | grep '=' | sed 's/^/-D/' | xargs)
+                            echo \\"Usando parámetros: \$D_FLAGS\\"
                             ${SQLCL_PATH} \$D_FLAGS \\"\$DB_USR\\"/\\"\$DB_PSW\\"@${DB_CONN_STR} <<EOF | tee /tmp/sqlcl_deploy.log
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
