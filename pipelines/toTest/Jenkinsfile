@@ -32,7 +32,8 @@ pipeline {
         stage('Obtain Artifact from DEVELOP') {
             steps {
                 script {
-                    echo "=== Obteniendo Artefacto desde DEVELOP ==="
+                    echo "=== Obteniendo Artefacto (.zip) desde DEVELOP ==="
+                    // Esta sección es la que 'toma' el artefacto generado en toDevelop
                     mkdir -p artifact
                     copyArtifacts(
                         projectName: 'APEX-Deploy-Develop',
@@ -43,18 +44,20 @@ pipeline {
                     )
                     sh "ls -la artifact/"
 
-                    echo "=== Preparando Directorio de Trabajo en Contenedor ==="
+                    echo "=== Preparando Contexto del Proyecto (Config y Propiedades) en Contenedor ==="
+                    // El .tar NO es el artefacto de la aplicación.
+                    // Es solo para mover la configuración (.dbtools, properties) al contenedor para que SQLcl funcione.
                     sh """
-                        tar -cf /tmp/project_test.tar -C ${WORKSPACE} .
+                        tar --exclude='./artifact' -cf /tmp/project_context.tar -C ${WORKSPACE} .
                         docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
-                        docker cp /tmp/project_test.tar ${ORACLE_CONTAINER}:/tmp/
+                        docker cp /tmp/project_context.tar ${ORACLE_CONTAINER}:/tmp/
                         docker exec -u root ${ORACLE_CONTAINER} bash -c "
                             rm -rf ${BUILD_DIR}/* ${BUILD_DIR}/.* 2>/dev/null || true
-                            tar -xf /tmp/project_test.tar -C ${BUILD_DIR}
+                            tar -xf /tmp/project_context.tar -C ${BUILD_DIR}
                             chown -R oracle: ${BUILD_DIR}
-                            rm /tmp/project_test.tar
+                            rm /tmp/project_context.tar
                         "
-                        rm /tmp/project_test.tar
+                        rm /tmp/project_context.tar
                     """
                 }
             }
