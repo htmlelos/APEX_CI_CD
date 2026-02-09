@@ -36,7 +36,7 @@ pipeline {
                     // Esta sección es la que 'toma' el artefacto generado en toDevelop
                     sh "mkdir -p artifact"
                     copyArtifacts(
-                        projectName: 'APEX-Deploy-Develop',
+                        projectName: 'APEX-Deploy-DESA',
                         selector: lastSuccessful(),
                         filter: 'artifact/*.zip',
                         target: '.',
