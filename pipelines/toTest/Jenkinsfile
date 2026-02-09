@@ -75,12 +75,13 @@ pipeline {
                     sh """
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
                             cd ${BUILD_DIR}
+                            echo "=== Preparando Configuración de Liquibase ==="
+                            # Convertir propiedades a formato liquibase.properties
+                            sed "s/\\\\r//" dist/utils/properties/test.properties | grep "=" > liquibase.properties
+                            
                             echo "=== Preparando Script de Despliegue ==="
                             echo "WHENEVER SQLERROR EXIT SQL.SQLCODE" > deploy_script.sql
                             echo "WHENEVER OSERROR EXIT FAILURE" >> deploy_script.sql
-                            # Convertir propiedades a DEFINES de SQLcl
-                            sed "s/\\\\r//" dist/utils/properties/test.properties | grep "=" | sed "s/^/DEFINE /" >> deploy_script.sql
-                            
                             echo "project config set -name sqlcl.connectionName -value test" >> deploy_script.sql
                             echo "project deploy -file /tmp/deploy_app.zip" >> deploy_script.sql
                             echo "exit" >> deploy_script.sql
@@ -88,7 +89,7 @@ pipeline {
                             echo "=== Ejecutando Despliegue con SQLcl ==="
                             ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} @deploy_script.sql | tee /tmp/sqlcl_deploy.log
                             
-                            if grep -qiE "ERROR:|Bad Filename|Usage:|not recognized|Failure" /tmp/sqlcl_deploy.log; then
+                            if grep -qiE "ERROR:|Bad Filename|Usage:|not recognized|Failure|ORA-" /tmp/sqlcl_deploy.log; then
                                 echo "!!! ERROR DETECTADO EN EL DESPLIEGUE !!!"
                                 exit 1
                             fi
