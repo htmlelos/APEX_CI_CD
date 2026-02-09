@@ -84,6 +84,7 @@ pipeline {
                             ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
+                            define DEFAULTS_FILE='dist/utils/properties/desa.properties'
                             project stage
                             project gen-artifact -name app-desa -version ${BUILD_NUMBER}
                             exit
