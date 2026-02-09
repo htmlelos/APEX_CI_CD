@@ -83,7 +83,7 @@ pipeline {
                             echo "=== Generando Artefacto con SQLcl ==="
                             # Extraer flags -D para Liquibase (Limpia CRLF y colapsa a una línea)
                             D_FLAGS=\$(sed "s/\\r//" dist/utils/properties/desa.properties | grep "=" | sed "s/^/-D/" |" "| xargs)
-                            echo "Usando parámetros: \$D_FLAGS"
+                            echo "Usando parámetros: ${D_FLAGS}"
                             ${SQLCL_PATH} \$D_FLAGS "\$DB_USR"/"$DB_PSW"@${DB_CONN_STR} <<EOF
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
