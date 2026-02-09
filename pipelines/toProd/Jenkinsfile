@@ -86,24 +86,28 @@ pipeline {
                     
                     sh """
                         docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
-                        docker cp . ${ORACLE_CONTAINER}:${BUILD_DIR}/
-                        docker cp ${artifactFile} ${ORACLE_CONTAINER}/tmp/deploy_prod.zip
+                        docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_prod.zip
                         docker exec -u root ${ORACLE_CONTAINER} chown -R oracle: ${BUILD_DIR}
                         
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
                             cd ${BUILD_DIR}
-                            echo "=== Desplegando Artefacto con SQLcl ==="
-                            # Extraer flags -D para Liquibase (Limpia CRLF y colapsa a una línea)
-                            D_FLAGS=\$(sed "s/\\r//" dist/utils/properties/prod.properties | grep "=" | sed "s/^/-D/" | xargs)
-                            echo "Usando parámetros: \$D_FLAGS"
-                            ${SQLCL_PATH} \$D_FLAGS "\$DB_USR"/"$DB_PSW"@${DB_CONN_STR} <<EOF
-                            WHENEVER SQLERROR EXIT SQL.SQLCODE
-                            WHENEVER OSERROR EXIT FAILURE
-                            define DEFAULTS_FILE="dist/utils/properties/prod.properties"
-                            project config set -name sqlcl.connectionName -value prod
-                            project deploy -file /tmp/deploy_prod.zip -verbose
-                            exit
-EOF
+                            echo "=== Preparando Script de Despliegue (PROD) ==="
+                            echo "WHENEVER SQLERROR EXIT SQL.SQLCODE" > deploy_script.sql
+                            echo "WHENEVER OSERROR EXIT FAILURE" >> deploy_script.sql
+                            # Convertir propiedades a DEFINES de SQLcl
+                            sed "s/\\\\r//" dist/utils/properties/prod.properties | grep "=" | sed "s/^/DEFINE /" >> deploy_script.sql
+                            
+                            echo "project config set -name sqlcl.connectionName -value prod" >> deploy_script.sql
+                            echo "project deploy -file /tmp/deploy_prod.zip -verbose" >> deploy_script.sql
+                            echo "exit" >> deploy_script.sql
+
+                            echo "=== Ejecutando Despliegue con SQLcl en PROD ==="
+                            ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} @deploy_script.sql | tee /tmp/sqlcl_deploy.log
+                            
+                            if grep -qiE "ERROR:|Bad Filename|Usage:|not recognized|Failure" /tmp/sqlcl_deploy.log; then
+                                echo "!!! ERROR DETECTADO EN EL DESPLIEGUE PROD !!!"
+                                exit 1
+                            fi
                         '
                     """
                 }
