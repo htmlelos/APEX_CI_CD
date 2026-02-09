@@ -39,7 +39,7 @@ pipeline {
                         projectName: 'APEX-Deploy-TEST',
                         selector: lastSuccessful(),
                         filter: 'artifact/*.zip',
-                        target: '.',
+                        target: 'artifact',
                         flatten: true
                     )
                     sh "ls -la artifact/"
