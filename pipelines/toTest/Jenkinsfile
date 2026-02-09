@@ -50,10 +50,10 @@ pipeline {
                     """
 
                     sh """
-                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
                             cd ${BUILD_DIR}
                             
-                            echo '=== Estabilizando Git (Branch Recovery) ==='
+                            echo "=== Estabilizando Git (Branch Recovery) ==="
                             git config --global --add safe.directory ${BUILD_DIR}
                             # Restaurar referencia local a main si existe en origin para SQLcl comparison
                             if git rev-parse --verify origin/main >/dev/null 2>&1; then
@@ -62,20 +62,20 @@ pipeline {
                             # Asegurar que estamos en una rama local (evitar detached HEAD)
                             git checkout -B build_branch
                             
-                            echo '=== Generando Artefacto con SQLcl ==='
+                            echo "=== Generando Artefacto con SQLcl ==="
                             # Extraer flags -D para Liquibase (Limpia CRLF y colapsa a una línea)
-                            D_FLAGS="\$(sed 's/\\\\r//' dist/utils/properties/test.properties | grep '=' | sed 's/^/-D/' | xargs)"
-                            echo \\"Usando parámetros: \$D_FLAGS\\"
-                            ${SQLCL_PATH} \$D_FLAGS \\"\$DB_USR\\"/\\"\$DB_PSW\\"@${DB_CONN_STR} <<EOF
+                            D_FLAGS=\$(sed "s/\\r//" dist/utils/properties/test.properties | grep "=" | sed "s/^/-D/" | xargs)
+                            echo "Usando parámetros: \$D_FLAGS"
+                            ${SQLCL_PATH} \$D_FLAGS "\$DB_USR"/"$DB_PSW"@${DB_CONN_STR} <<EOF
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
-                            define DEFAULTS_FILE='dist/utils/properties/test.properties'
+                            define DEFAULTS_FILE="dist/utils/properties/test.properties"
                             project config set -name sqlcl.connectionName -value test
                             project stage
                             project gen-artifact -name app-test -version ${BUILD_NUMBER}
                             exit
 EOF
-                        "
+                        '
                     """
                     sh "mkdir -p artifact && docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
                 }
@@ -92,25 +92,25 @@ EOF
                     def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
                     sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
                     sh """
-                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
                             cd ${BUILD_DIR}
-                            echo '=== Desplegando Artefacto con SQLcl ==='
+                            echo "=== Desplegando Artefacto con SQLcl ==="
                             # Extraer flags -D para Liquibase (Limpia CRLF y colapsa a una línea)
-                            D_FLAGS="\$(sed 's/\\\\r//' dist/utils/properties/test.properties | grep '=' | sed 's/^/-D/' | xargs)"
-                            echo \\"Usando parámetros: \$D_FLAGS\\"
-                            ${SQLCL_PATH} \$D_FLAGS \\"\$DB_USR\\"/\\"\$DB_PSW\\"@${DB_CONN_STR} <<EOF | tee /tmp/sqlcl_deploy.log
+                            D_FLAGS=\$(sed "s/\\r//" dist/utils/properties/test.properties | grep "=" | sed "s/^/-D/" | xargs)
+                            echo "Usando parámetros: \$D_FLAGS"
+                            ${SQLCL_PATH} \$D_FLAGS "\$DB_USR"/"$DB_PSW"@${DB_CONN_STR} <<EOF | tee /tmp/sqlcl_deploy.log
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
                             WHENEVER OSERROR EXIT FAILURE
-                            define DEFAULTS_FILE='dist/utils/properties/test.properties'
+                            define DEFAULTS_FILE="dist/utils/properties/test.properties"
                             project config set -name sqlcl.connectionName -value test
                             project deploy -file /tmp/deploy_app.zip
                             exit
 EOF
-                            if grep -qi 'ERROR:' /tmp/sqlcl_deploy.log; then
-                                echo '!!! ERROR DETECTADO EN EL DESPLIEGUE !!!'
+                            if grep -qi "ERROR:" /tmp/sqlcl_deploy.log; then
+                                echo "!!! ERROR DETECTADO EN EL DESPLIEGUE !!!"
                                 exit 1
                             fi
-                        "
+                        '
                     """
                 }
             }
