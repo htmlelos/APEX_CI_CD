@@ -29,55 +29,33 @@ pipeline {
             }
         }
 
-        stage('Generate Artifact') {
-            environment {
-                DB = credentials('apex-test-credential')
-            }
+        stage('Obtain Artifact from DEVELOP') {
             steps {
                 script {
-                    echo "=== Generando Artefacto para TEST ==="
+                    echo "=== Obteniendo Artefacto desde DEVELOP ==="
+                    mkdir -p artifact
+                    copyArtifacts(
+                        projectName: 'APEX-Deploy-Develop',
+                        selector: lastSuccessful(),
+                        filter: 'artifact/*.zip',
+                        target: '.',
+                        flatten: true
+                    )
+                    sh "ls -la artifact/"
+
+                    echo "=== Preparando Directorio de Trabajo en Contenedor ==="
                     sh """
-                        tar -cf /tmp/project.tar -C ${WORKSPACE} .
+                        tar -cf /tmp/project_test.tar -C ${WORKSPACE} .
                         docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
-                        docker cp /tmp/project.tar ${ORACLE_CONTAINER}:/tmp/
+                        docker cp /tmp/project_test.tar ${ORACLE_CONTAINER}:/tmp/
                         docker exec -u root ${ORACLE_CONTAINER} bash -c "
                             rm -rf ${BUILD_DIR}/* ${BUILD_DIR}/.* 2>/dev/null || true
-                            tar -xf /tmp/project.tar -C ${BUILD_DIR}
+                            tar -xf /tmp/project_test.tar -C ${BUILD_DIR}
                             chown -R oracle: ${BUILD_DIR}
-                            rm /tmp/project.tar
+                            rm /tmp/project_test.tar
                         "
-                        rm /tmp/project.tar
+                        rm /tmp/project_test.tar
                     """
-
-                    sh """
-                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
-                            cd ${BUILD_DIR}
-                            
-                            echo "=== Estabilizando Git (Branch Recovery) ==="
-                            git config --global --add safe.directory ${BUILD_DIR}
-                            # Restaurar referencia local a main si existe en origin para SQLcl comparison
-                            if git rev-parse --verify origin/main >/dev/null 2>&1; then
-                                git branch -f main origin/main
-                            fi
-                            # Asegurar que estamos en una rama local (evitar detached HEAD)
-                            git checkout -B build_branch
-                            
-                            echo "=== Generando Artefacto con SQLcl ==="
-                            # Extraer flags -D para Liquibase (Limpia CRLF y colapsa a una línea)
-                            D_FLAGS=\$(sed "s/\\r//" dist/utils/properties/test.properties | grep "=" | sed "s/^/-D/" |" "| xargs)
-                            echo "Usando parámetros: \$D_FLAGS"
-                            ${SQLCL_PATH} \$D_FLAGS "\$DB_USR"/"$DB_PSW"@${DB_CONN_STR} <<EOF
-                            WHENEVER SQLERROR EXIT SQL.SQLCODE
-                            WHENEVER OSERROR EXIT FAILURE
-                            define DEFAULTS_FILE="dist/utils/properties/test.properties"
-                            project config set -name sqlcl.connectionName -value test
-                            project stage
-                            project gen-artifact -name app-test -version ${BUILD_NUMBER}
-                            exit
-EOF
-                        '
-                    """
-                    sh "mkdir -p artifact && docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
                 }
             }
         }
@@ -96,7 +74,7 @@ EOF
                             cd ${BUILD_DIR}
                             echo "=== Desplegando Artefacto con SQLcl ==="
                             # Extraer flags -D para Liquibase (Limpia CRLF y colapsa a una línea)
-                            D_FLAGS=$(sed "s/\r//" dist/utils/properties/test.properties | grep "=" | sed "s/^/-D/" | xargs)
+                            D_FLAGS=\$(sed "s/\\r//" dist/utils/properties/test.properties | grep "=" | sed "s/^/-D/" | xargs)
                             echo "Usando parámetros: \$D_FLAGS"
                             ${SQLCL_PATH} \$D_FLAGS "\$DB_USR"/"$DB_PSW"@${DB_CONN_STR} <<EOF | tee /tmp/sqlcl_deploy.log
                             WHENEVER SQLERROR EXIT SQL.SQLCODE
