@@ -71,7 +71,16 @@ pipeline {
                 script {
                     echo "=== Desplegando a TEST (Esquema: ${DB_USR}) ==="
                     def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
-                    def workspaceName = sh(script: "grep 'apex.102.workspace' dist/utils/properties/test.properties | cut -d= -f2 | tr -d '\\r'", returnStdout: true).trim()
+                    def workspaceName = sh(script: "grep 'apex.workspace' dist/utils/properties/test.properties | cut -d= -f2 | tr -d '\\r'", returnStdout: true).trim()
+
+                    echo "=== Validando Artefacto Portable ==="
+                    sh """
+                        if unzip -p ${artifactFile} | grep -q "set_security_group_id"; then
+                            echo "!!! ERROR: El artefacto NO es portable (contiene workspace binding) !!!"
+                            exit 1
+                        fi
+                        echo "✓ Artefacto validado como portable"
+                    """
 
                     echo "=== Verificando Existencia del Workspace: ${workspaceName} ==="
                     sh """
@@ -86,39 +95,32 @@ EOF
                         " | grep "EXISTE_WORKSPACE" || (echo "!!! ERROR: El workspace ${workspaceName} NO existe en el ambiente TEST !!!"; exit 1)
                     """
 
-                    echo "=== Generando Script de Despliegue (File-Based) ==="
-                    def deployScript = """
+
+
+                    echo "=== Desplegando con SQLcl (Workspace asignado via liquibase.properties) ==="
+                    sh """
+                        docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
+                            cd ${BUILD_DIR}
+                            
+                            echo "=== Generando liquibase.properties desde test.properties ==="
+                            sed "s/\\\\r//" dist/utils/properties/test.properties | grep "=" > liquibase.properties
+                            cat liquibase.properties
+                            
+                            echo "=== Ejecutando Despliegue con SQLcl ==="
+                            ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF | tee /tmp/sqlcl_deploy.log
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT FAILURE
 project config set -name sqlcl.connectionName -value test
-
-PROMPT === Redefiniendo Workspace destino: ${workspaceName} ===
-BEGIN 
-    APEX_APPLICATION_INSTALL.SET_WORKSPACE('${workspaceName}'); 
-END;
-/
-
 project deploy -file /tmp/deploy_app.zip
 exit
-""".trim()
-                    writeFile file: 'deploy_script.sql', text: deployScript
-
-                    sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
-                    sh "docker cp deploy_script.sql ${ORACLE_CONTAINER}:${BUILD_DIR}/deploy_script.sql"
-
-                    sh """
-                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
-                            cd ${BUILD_DIR}
-                            echo "=== Preparando Configuración de Liquibase ==="
-                            sed "s/\\\\r//" dist/utils/properties/test.properties | grep "=" > liquibase.properties
-                            
-                            echo "=== Ejecutando Despliegue con SQLcl ==="
-                            ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} @deploy_script.sql | tee /tmp/sqlcl_deploy.log
+EOF
                             
                             if grep -qiE "ERROR:|Bad Filename|Usage:|not recognized|Failure|ORA-" /tmp/sqlcl_deploy.log; then
                                 echo "!!! ERROR DETECTADO EN EL DESPLIEGUE !!!"
                                 exit 1
                             fi
+                            echo "✓ Despliegue completado exitosamente"
                         '
                     """
                 }
