@@ -64,7 +64,9 @@ pipeline {
                             tar -xf /tmp/project_desa.tar -C ${BUILD_DIR}
                             chown -R oracle: ${BUILD_DIR}
                             git config --global --add safe.directory ${BUILD_DIR}
-                            cd ${BUILD_DIR} && git checkout -B develop
+                            cd ${BUILD_DIR}
+                            git checkout -B develop
+                            git branch main develop || true
                             rm /tmp/project_desa.tar
                         "
                         rm /tmp/project_desa.tar
