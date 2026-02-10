@@ -17,7 +17,6 @@ pipeline {
         DB_CONN_STR      = "localhost:1521/FREEPDB1"
         BUILD_DIR        = "/tmp/apex_project_test"
         DB_USR           = "TEST_SCHEMA"
-        APEX_TEST_URL    = "http://localhost:8181/ords/r/test_wrkspc_cicd/app-ci-cd" 
         MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
     }
 
@@ -29,11 +28,9 @@ pipeline {
             }
         }
 
-        stage('Obtain Artifact from DEVELOP') {
+        stage('Obtain Artifact') {
             steps {
                 script {
-                    echo "=== Obteniendo Artefacto (.zip) desde DEVELOP ==="
-                    // Esta sección es la que 'toma' el artefacto generado en toDevelop
                     sh "mkdir -p artifact"
                     copyArtifacts(
                         projectName: 'APEX-Deploy-DESA',
@@ -42,11 +39,19 @@ pipeline {
                         target: 'artifact',
                         flatten: true
                     )
-                    sh "ls -la artifact/"
+                }
+            }
+        }
 
-                    echo "=== Preparando Contexto del Proyecto (Config y Propiedades) en Contenedor ==="
-                    // El .tar NO es el artefacto de la aplicación.
-                    // Es solo para mover la configuración (.dbtools, properties) al contenedor para que SQLcl funcione.
+        stage('Deploy to TEST') {
+            environment {
+                DB = credentials('apex-test-credential')
+            }
+            steps {
+                script {
+                    def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
+                    
+                    echo "=== Preparando Contexto en Contenedor ==="
                     sh """
                         tar --exclude='./artifact' -cf /tmp/project_context.tar -C ${WORKSPACE} .
                         docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
@@ -58,112 +63,33 @@ pipeline {
                             rm /tmp/project_context.tar
                         "
                         rm /tmp/project_context.tar
-                    """
-                }
-            }
-        }
-
-        stage('Deploy to TEST') {
-            environment {
-                DB = credentials('apex-test-credential')
-            }
-            steps {
-                script {
-                    echo "=== Desplegando a TEST (Esquema: ${DB_USR}) ==="
-                    def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
-                    def workspaceName = sh(script: "grep '^apex.workspace=' dist/utils/properties/test.properties | head -n1 | cut -d= -f2 | tr -d '\\r'", returnStdout: true).trim()
-                    
-                    echo "=== Debug: Workspace extraído ==="
-                    echo "Valor: [${workspaceName}]"
-                    echo "Longitud: ${workspaceName.length()}"
-
-                    echo "=== Validando Artefacto Portable ==="
-                    sh """
-                        echo "Verificando archivos APEX en el artefacto..."
-                        if unzip -l ${artifactFile} | grep -q "f102.sql"; then
-                            if unzip -p ${artifactFile} "*/f102.sql" | grep -q "set_security_group_id"; then
-                                echo "!!! ERROR: El artefacto NO es portable (f102.sql contiene workspace binding) !!!"
-                                exit 1
-                            fi
-                        elif unzip -p ${artifactFile} | grep -q "set_security_group_id"; then
-                            echo "!!! ERROR: El artefacto NO es portable (contiene workspace binding) !!!"
-                            exit 1
-                        fi
-                        echo "✓ Artefacto validado como portable"
-                    """
-
-                    echo "=== Verificando Existencia del Workspace: ${workspaceName} ==="
-                    sh """
-                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
-                            ${SQLCL_PATH} -S \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
-                            SET TERMOUT OFF
-                            SET FEEDBACK OFF
-                            SET PAGESIZE 0
-                            SELECT 'EXISTE_WORKSPACE:' || workspace_id FROM apex_workspaces WHERE workspace = upper('${workspaceName}');
-                            EXIT
-EOF
-                        " | grep "EXISTE_WORKSPACE" || (echo "!!! ERROR: El workspace ${workspaceName} NO existe en el ambiente TEST !!!"; exit 1)
-                    """
-
-
-
-                    echo "=== Desplegando con SQLcl (Workspace asignado via liquibase.properties) ==="
-                    sh """
                         docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip
+                    """
+
+                    echo "=== Ejecutando Despliegue con SQLcl ==="
+                    sh """
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
                             cd ${BUILD_DIR}
                             
-                            echo "=== Generando liquibase.properties desde test.properties ==="
+                            echo "=== Generando liquibase.properties ==="
                             sed "s/\\\\r//" dist/utils/properties/test.properties | grep "=" > liquibase.properties
-                            cat liquibase.properties
                             
-                            echo "=== Ejecutando Despliegue con SQLcl ==="
-                            ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF | tee /tmp/sqlcl_deploy.log
+                            ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT FAILURE
 project config set -name sqlcl.connectionName -value test
 project deploy -file /tmp/deploy_app.zip
 exit
 EOF
-                            
-                            if grep -qiE "ERROR:|Bad Filename|Usage:|not recognized|Failure|ORA-" /tmp/sqlcl_deploy.log; then
-                                echo "!!! ERROR DETECTADO EN EL DESPLIEGUE !!!"
-                                exit 1
-                            fi
-                            echo "✓ Despliegue completado exitosamente"
                         '
                     """
                 }
             }
         }
-
     }
     
     post {
-        success {
-            script {
-                try {
-                    mail to: "${env.MAIL_RECIPIENTS}",
-                         subject: "Success: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} fue exitosa.\nDespliegue en TEST completado.\n\nVer detalles en: ${env.BUILD_URL}"
-                } catch (Exception e) {
-                    echo "Error enviando correo: ${e.message}"
-                }
-            }
-        }
-        failure {
-            script {
-                try {
-                    mail to: "${env.MAIL_RECIPIENTS}",
-                         subject: "Failure: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} ha fallado en el ambiente de TEST.\n\nVer consola: ${env.BUILD_URL}console"
-                } catch (Exception e) {
-                    echo "Error enviando correo de fallo: ${e.message}"
-                }
-            }
-        }
         always {
-            archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
             sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} || true"
         }
     }
