@@ -145,6 +145,7 @@ EOF
                              ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF | tee /tmp/sqlcl_deploy.log
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT FAILURE
+define PROJECT_ROOT="${BUILD_DIR}"
 define DEFAULTS_FILE="${BUILD_DIR}/liquibase.properties"
 project config set -name sqlcl.connectionName -value prod
 project deploy -file /tmp/deploy_prod.zip -verbose
