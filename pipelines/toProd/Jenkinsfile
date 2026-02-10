@@ -83,7 +83,11 @@ pipeline {
                 script {
                     echo "=== Desplegando a PRODUCCIÓN (Esquema: ${DB_USR}) ==="
                     def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
-                    def workspaceName = sh(script: "grep 'apex.workspace' dist/utils/properties/prod.properties | cut -d= -f2 | tr -d '\\r'", returnStdout: true).trim()
+                    def workspaceName = sh(script: "grep '^apex.workspace=' dist/utils/properties/prod.properties | head -n1 | cut -d= -f2 | tr -d '\\r'", returnStdout: true).trim()
+                    
+                    echo "=== Debug: Workspace extraído (PROD) ==="
+                    echo "Valor: [${workspaceName}]"
+                    echo "Longitud: ${workspaceName.length()}"
 
                     echo "=== Validando Artefacto Portable ==="
                     sh """
