@@ -85,9 +85,10 @@ pipeline {
                             echo "project config set -name sqlcl.connectionName -value test" >> deploy_script.sql
                             
                             echo "=== Redefiniendo Workspace destino ==="
-                            WORKSPACE_NAME=\$(grep 'apex.102.workspace' dist/utils/properties/test.properties | cut -d'=' -f2 | tr -d '\\r')
-                            echo \"BEGIN APEX_APPLICATION_INSTALL.SET_WORKSPACE('\${WORKSPACE_NAME}'); END;\" >> deploy_script.sql
-                            echo \"/\" >> deploy_script.sql
+                            # Usamos sed para extraer y limpiar sin comillas que rompan el bash -c
+                            WORKSPACE_NAME=\$(grep apex.102.workspace dist/utils/properties/test.properties | cut -d= -f2 | sed s/\\\\r//)
+                            echo "BEGIN APEX_APPLICATION_INSTALL.SET_WORKSPACE('\${WORKSPACE_NAME}'); END;" >> deploy_script.sql
+                            echo "/" >> deploy_script.sql
 
                             echo "project deploy -file /tmp/deploy_app.zip" >> deploy_script.sql
                             echo "exit" >> deploy_script.sql
