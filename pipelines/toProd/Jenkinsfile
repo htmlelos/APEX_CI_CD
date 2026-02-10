@@ -53,11 +53,14 @@ pipeline {
                     echo "=== Ejecutando Playwright en ambiente de TEST antes de PROD ==="
                     sh """
                         docker rm -f playwright-runner 2>/dev/null || true
-                        docker create --name playwright-runner -w /work -e APEX_TEST_URL=${APEX_TEST_URL} mcr.microsoft.com/playwright:v1.40.0-jammy /bin/bash -c "npm install && npx playwright test"
-                        docker cp . playwright-runner:/work
-                        docker start -a playwright-runner
-                        docker cp playwright-runner:/work/playwright-report . || true
-                        docker rm -f playwright-runner
+                        docker run --rm --name playwright-runner \\
+                            --net=host \\
+                            -v ${WORKSPACE}:/work \\
+                            -w /work \\
+                            -e APEX_TEST_URL=${APEX_TEST_URL} \\
+                            -e CI=true \\
+                            mcr.microsoft.com/playwright:v1.40.0-jammy \\
+                            /bin/bash -c "npm install && npx playwright test"
                     """
                 }
             }
