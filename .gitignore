@@ -9,3 +9,4 @@ var/*
 /dist/*
 !/dist/utils/
 !/dist/install.sql
+!/dist/releases/
