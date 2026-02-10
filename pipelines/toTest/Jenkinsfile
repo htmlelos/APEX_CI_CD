@@ -57,9 +57,10 @@ pipeline {
                         docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
                         docker cp /tmp/project_context.tar ${ORACLE_CONTAINER}:/tmp/
                         docker exec -u root ${ORACLE_CONTAINER} bash -c "
-                            rm -rf ${BUILD_DIR}/* ${BUILD_DIR}/.* 2>/dev/null || true
-                            tar -xf /tmp/project_context.tar -C ${BUILD_DIR}
-                            chown -R oracle: ${BUILD_DIR}
+                            rm -rf /tmp/apex_project_test/* /tmp/apex_project_test/.* 2>/dev/null || true
+                            tar -xf /tmp/project_context.tar -C /tmp/apex_project_test
+                            cp -r /tmp/apex_project_test/dist/* /tmp/apex_project_test/
+                            chown -R oracle: /tmp/apex_project_test
                             rm /tmp/project_context.tar
                         "
                         rm /tmp/project_context.tar
