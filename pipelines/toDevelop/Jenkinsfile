@@ -99,7 +99,7 @@ EOF
                             if grep -q "wwv_flow_api.set_security_group_id(p_security_group_id=>wwv_flow_security.g_security_group_id)" /tmp/f102_check.sql; then
                                 echo "✓ Artefacto validado como portable (usa variable dinámica)"
                             # Verificar que NO tenga un workspace ID hardcodeado (números de 17+ dígitos)
-                            elif grep -qE "set_security_group_id\(p_security_group_id=>[0-9]{17,}\)" /tmp/f102_check.sql; then
+                            elif grep -qE "set_security_group_id\\(p_security_group_id=>[0-9]{17,}\\)" /tmp/f102_check.sql; then
                                 echo "!!! ERROR: El artefacto NO es portable (contiene workspace ID hardcodeado) !!!"
                                 grep -E "set_security_group_id" /tmp/f102_check.sql | head -5
                                 exit 1
