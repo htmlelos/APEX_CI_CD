@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.3.xsd">
+<include file="sys/object_grants/object_grants_as_grantor.sys.mle_language.javascript.sql" relativeToChangelogFile="true"/>
+<include file="desa_schema/sequences/snr_test_id_sq.sql" relativeToChangelogFile="true"/>
+<include file="desa_schema/tables/snr_users.sql" relativeToChangelogFile="true"/>
+<include file="desa_schema/package_specs/snr_test_pkg.sql" relativeToChangelogFile="true"/>
+<include file="desa_schema/triggers/trb_snr_test.sql" relativeToChangelogFile="true"/>
+<include file="desa_schema/package_bodies/snr_test_pkg.sql" relativeToChangelogFile="true"/>
+</databaseChangeLog>
