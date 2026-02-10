@@ -6,4 +6,6 @@ var/*
 *.zip
 *.log
 **/.DS_Store
-/dist
+/dist/*
+!/dist/utils/
+!/dist/install.sql
