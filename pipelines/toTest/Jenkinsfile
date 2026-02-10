@@ -73,26 +73,45 @@ pipeline {
                     def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
                     def workspaceName = sh(script: "grep 'apex.102.workspace' dist/utils/properties/test.properties | cut -d= -f2 | tr -d '\\r'", returnStdout: true).trim()
 
+                    echo "=== Verificando Existencia del Workspace: ${workspaceName} ==="
+                    sh """
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                            ${SQLCL_PATH} -S \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
+                            SET TERMOUT OFF
+                            SET FEEDBACK OFF
+                            SET PAGESIZE 0
+                            SELECT 'EXISTE_WORKSPACE:' || workspace_id FROM apex_workspaces WHERE workspace = upper('${workspaceName}');
+                            EXIT
+EOF
+                        " | grep "EXISTE_WORKSPACE" || (echo "!!! ERROR: El workspace ${workspaceName} NO existe en el ambiente TEST !!!"; exit 1)
+                    """
+
+                    echo "=== Generando Script de Despliegue (File-Based) ==="
+                    def deployScript = """
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+project config set -name sqlcl.connectionName -value test
+
+PROMPT === Redefiniendo Workspace destino: ${workspaceName} ===
+BEGIN 
+    APEX_APPLICATION_INSTALL.SET_WORKSPACE('${workspaceName}'); 
+END;
+/
+
+project deploy -file /tmp/deploy_app.zip
+exit
+""".trim()
+                    writeFile file: 'deploy_script.sql', text: deployScript
+
                     sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
+                    sh "docker cp deploy_script.sql ${ORACLE_CONTAINER}:${BUILD_DIR}/deploy_script.sql"
+
                     sh """
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
                             cd ${BUILD_DIR}
                             echo "=== Preparando Configuración de Liquibase ==="
-                            # Convertir propiedades a formato liquibase.properties
                             sed "s/\\\\r//" dist/utils/properties/test.properties | grep "=" > liquibase.properties
                             
-                            echo "=== Preparando Script de Despliegue ==="
-                            echo "WHENEVER SQLERROR EXIT SQL.SQLCODE" > deploy_script.sql
-                            echo "WHENEVER OSERROR EXIT FAILURE" >> deploy_script.sql
-                            echo "project config set -name sqlcl.connectionName -value test" >> deploy_script.sql
-                            
-                            echo "=== Redefiniendo Workspace destino: ${workspaceName} ==="
-                            echo "BEGIN APEX_APPLICATION_INSTALL.SET_WORKSPACE('\''${workspaceName}'\''); END;" >> deploy_script.sql
-                            echo "/" >> deploy_script.sql
-
-                            echo "project deploy -file /tmp/deploy_app.zip" >> deploy_script.sql
-                            echo "exit" >> deploy_script.sql
-
                             echo "=== Ejecutando Despliegue con SQLcl ==="
                             ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} @deploy_script.sql | tee /tmp/sqlcl_deploy.log
                             
