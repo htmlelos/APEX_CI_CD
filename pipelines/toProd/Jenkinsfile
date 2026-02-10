@@ -122,7 +122,17 @@ EOF
                     sh """
                         docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
                         docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_prod.zip
-                        docker exec -u root ${ORACLE_CONTAINER} chown -R oracle: ${BUILD_DIR}
+                        
+                        tar --exclude=./artifact -cf /tmp/project_context.tar -C ${WORKSPACE} .
+                        docker cp /tmp/project_context.tar ${ORACLE_CONTAINER}:/tmp/
+                        docker exec -u root ${ORACLE_CONTAINER} bash -c "
+                            rm -rf ${BUILD_DIR}/* ${BUILD_DIR}/.* 2>/dev/null || true
+                            tar -xf /tmp/project_context.tar -C ${BUILD_DIR}
+                            cp -r ${BUILD_DIR}/dist/* ${BUILD_DIR}/
+                            chown -R oracle: ${BUILD_DIR}
+                            rm /tmp/project_context.tar
+                        "
+                        rm /tmp/project_context.tar
                         
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
                             cd ${BUILD_DIR}
