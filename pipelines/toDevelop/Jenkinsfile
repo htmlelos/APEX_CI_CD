@@ -47,13 +47,14 @@ pipeline {
                 }
             }
         }
+
         stage('Generate Artifact') {
             environment {
                 DB = credentials('apex-dev-credential')
             }
             steps {
                 script {
-                    echo "=== Generando Artefacto para DESA ==="
+                    echo "=== Preparando Workspace en Contenedor ==="
                     sh """
                         tar -cf /tmp/project_desa.tar -C ${WORKSPACE} .
                         docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
@@ -67,93 +68,25 @@ pipeline {
                         rm /tmp/project_desa.tar
                     """
 
+                    echo "=== Generando Artefacto con SQLcl ==="
                     sh """
-                    sh """
-                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
                             cd ${BUILD_DIR}
                             
-                            echo \\"=== Estabilizando Git (Branch Recovery) ==\\"
-                            git config --global --add safe.directory ${BUILD_DIR}
-                            # Restaurar referencia local a main si existe en origin para SQLcl comparison
-                            if git rev-parse --verify origin/main >/dev/null 2>&1; then
-                                git branch -f main origin/main
-                            fi
-                            # Asegurar que estamos en una rama local (evitar detached HEAD)
-                            git checkout -B build_branch
-
-                            echo \\"=== Generando Artefacto Portable con SQLcl ==\\"
-                            ${SQLCL_PATH} \\"\$DB_USR\\"/\\"\$DB_PSW\\"@${DB_CONN_STR} <<EOF
+                            # Generar artefacto
+                            ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT FAILURE
-SET SERVEROUTPUT ON
 
--- CRÍTICO: Limpiar y establecer workspace ID a NULL antes de exportar
--- Esto fuerza a APEX a generar código portable
-BEGIN
-    DBMS_OUTPUT.PUT_LINE('=== Configurando generación de artefacto portable ===');
-    APEX_APPLICATION_INSTALL.CLEAR_ALL;
-    APEX_APPLICATION_INSTALL.SET_WORKSPACE_ID(NULL);
-    APEX_APPLICATION_INSTALL.GENERATE_APPLICATION_ID;
-    COMMIT;
-    DBMS_OUTPUT.PUT_LINE('=== Workspace ID configurado a NULL - Artefacto será portable ===');
-EXCEPTION
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('!!! ERROR en configuración: ' || SQLERRM);
-        RAISE;
-END;
-/
+-- Usar script externo para portabilidad
+@dist/utils/sql/set_portable_mode.sql
 
-define DEFAULTS_FILE=\\"dist/utils/properties/desa.properties\\"
+define DEFAULTS_FILE="dist/utils/properties/desa.properties"
 project stage
 project gen-artifact -name app-desa -version ${BUILD_NUMBER}
 exit
 EOF
-
-                            echo \\"=== Validando Artefacto Portable ==\\"
-                            # Extraer f102.sql para análisis
-                            unzip -p artifact/app-desa-${BUILD_NUMBER}.zip */f102.sql > /tmp/f102_validation.sql 2>/dev/null || \\
-                            unzip -p artifact/app-desa-${BUILD_NUMBER}.zip f102.sql > /tmp/f102_validation.sql 2>/dev/null
-
-                            if [ ! -s /tmp/f102_validation.sql ]; then
-                                echo \\"!!! ERROR: No se pudo extraer f102.sql del artefacto !!!\\"
-                                exit 1
-                            fi
-
-                            # Mostrar TODAS las líneas con set_security_group_id para debugging completo
-                            echo \\"--- Contenido de set_security_group_id en el artefacto (primeras 15 líneas) ---\\"
-                            grep -n \\"set_security_group_id\\" /tmp/f102_validation.sql | head -15
-
-                            # Contar ocurrencias de cada patrón
-                            PORTABLE_COUNT=\\\$(grep -c \\"wwv_flow_security.g_security_group_id\\" /tmp/f102_validation.sql || echo 0)
-                            HARDCODED_COUNT=\\\$(grep -cE \\"set_security_group_id[(]p_security_group_id=>[0-9]{15,}[)]\\" /tmp/f102_validation.sql || echo 0)
-
-                            echo \\"\\"
-                            echo \\"=== Análisis de Portabilidad ==\\"
-                            echo \\"Ocurrencias de g_security_group_id (PORTABLE): \\\$PORTABLE_COUNT\\"
-                            echo \\"Ocurrencias de workspace ID hardcodeado (NO PORTABLE): \\\$HARDCODED_COUNT\\"
-                            echo \\"\\"
-
-                            # Validación estricta
-                            if [ \\"\$HARDCODED_COUNT\\" -gt 0 ]; then
-                                echo \\"!!! ERROR CRÍTICO: Artefacto NO portable - contiene \\$HARDCODED_COUNT workspace ID(s) hardcodeado(s) !!!\\"
-                                echo \\"--- Líneas problemáticas ---\\"
-                                grep -E \\"set_security_group_id[(]p_security_group_id=>[0-9]{15,}[)]\\" /tmp/f102_validation.sql | head -5
-                                rm /tmp/f102_validation.sql
-                                exit 1
-                            elif [ \\"\$PORTABLE_COUNT\\" -gt 0 ]; then
-                                echo \\"✓✓✓ Artefacto validado como PORTABLE ✓✓✓\\"
-                                echo \\"✓ Usa wwv_flow_security.g_security_group_id (variable de sesión)\\"
-                                echo \\"✓ Se adaptará automáticamente al workspace de destino\\"
-                            else
-                                echo \\"⚠⚠⚠ ADVERTENCIA: No se encontró ningún patrón conocido ⚠⚠⚠\\"
-                                echo \\"Revisar manualmente el artefacto antes de desplegar\\"
-                                echo \\"--- Primeras 20 líneas del archivo ---\\"
-                                head -20 /tmp/f102_validation.sql
-                                rm /tmp/f102_validation.sql
-                                exit 1
-                            fi
-                            rm -f /tmp/f102_validation.sql
-                        "
+                        '
                     """
                     sh "mkdir -p artifact && docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
                 }
@@ -162,28 +95,6 @@ EOF
     }
     
     post {
-        success {
-            script {
-                try {
-                    mail to: "${env.MAIL_RECIPIENTS}",
-                         subject: "Success: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} fue exitosa.\nAnálisis SonarQube completado y Artefacto generado.\n\nVer detalles en: ${env.BUILD_URL}"
-                } catch (Exception e) {
-                    echo "Error enviando correo: ${e.message}"
-                }
-            }
-        }
-        failure {
-            script {
-                try {
-                    mail to: "${env.MAIL_RECIPIENTS}",
-                         subject: "Failure: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                         body: "La ejecución del pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} ha fallado.\n\nVer consola: ${env.BUILD_URL}console"
-                } catch (Exception e) {
-                    echo "Error enviando correo de fallo: ${e.message}"
-                }
-            }
-        }
         always {
             archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
             sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} || true"
