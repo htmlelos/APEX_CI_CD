@@ -84,6 +84,16 @@ pipeline {
                             ${SQLCL_PATH} "\$DB_USR"/"$DB_PSW"@${DB_CONN_STR} <<EOF
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT FAILURE
+
+-- CRÍTICO: Establecer workspace ID a NULL antes de exportar
+-- Esto fuerza a APEX a generar código portable
+BEGIN
+    APEX_APPLICATION_INSTALL.SET_WORKSPACE_ID(NULL);
+    APEX_APPLICATION_INSTALL.GENERATE_APPLICATION_ID;
+    COMMIT;
+END;
+/
+
 define DEFAULTS_FILE="dist/utils/properties/desa.properties"
 project stage
 project gen-artifact -name app-desa -version ${BUILD_NUMBER}
@@ -91,22 +101,26 @@ exit
 EOF
 
                             echo "=== Validando Artefacto Portable ==="
-                            # Extraer el archivo f102.sql del artefacto
-                            unzip -p artifact/app-desa-${BUILD_NUMBER}.zip */f102.sql > /tmp/f102_check.sql 2>/dev/null || \
-                            unzip -p artifact/app-desa-${BUILD_NUMBER}.zip f102.sql > /tmp/f102_check.sql 2>/dev/null || true
-                            
-                            # Verificar que use la variable dinámica (portable)
-                            if grep -q "wwv_flow_api.set_security_group_id(p_security_group_id=>wwv_flow_security.g_security_group_id)" /tmp/f102_check.sql; then
-                                echo "✓ Artefacto validado como portable (usa variable dinámica)"
-                            # Verificar que NO tenga un workspace ID hardcodeado (números de 17+ dígitos)
-                            elif grep -qE "set_security_group_id\\(p_security_group_id=>[0-9]{17,}\\)" /tmp/f102_check.sql; then
-                                echo "!!! ERROR: El artefacto NO es portable (contiene workspace ID hardcodeado) !!!"
-                                grep -E "set_security_group_id" /tmp/f102_check.sql | head -5
+                            # Extraer f102.sql para análisis
+                            unzip -p artifact/app-desa-${BUILD_NUMBER}.zip */f102.sql > /tmp/f102_validation.sql 2>/dev/null || \
+                            unzip -p artifact/app-desa-${BUILD_NUMBER}.zip f102.sql > /tmp/f102_validation.sql 2>/dev/null
+
+                            # Mostrar las primeras líneas con set_security_group_id para debugging
+                            echo "--- Contenido de set_security_group_id en el artefacto ---"
+                            grep -A1 "set_security_group_id" /tmp/f102_validation.sql | head -10
+
+                            # Validar que usa variable dinámica (PORTABLE)
+                            if grep -q "wwv_flow_security.g_security_group_id" /tmp/f102_validation.sql; then
+                                echo "✓ Artefacto validado como PORTABLE (usa g_security_group_id)"
+                            elif grep -qE "set_security_group_id\\(p_security_group_id=>[0-9]{15,}\\)" /tmp/f102_validation.sql; then
+                                echo "!!! ERROR: Artefacto NO portable - contiene workspace ID hardcodeado !!!"
+                                grep "set_security_group_id" /tmp/f102_validation.sql | head -3
+                                rm /tmp/f102_validation.sql
                                 exit 1
                             else
-                                echo "✓ Artefacto generado (validación de portabilidad requiere revisión manual)"
+                                echo "⚠ ADVERTENCIA: No se pudo validar portabilidad - revisar manualmente"
                             fi
-                            rm -f /tmp/f102_check.sql
+                            rm -f /tmp/f102_validation.sql
                         '
                     """
                     sh "mkdir -p artifact && docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
