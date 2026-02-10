@@ -71,9 +71,11 @@ pipeline {
                 script {
                     echo "=== Desplegando a TEST (Esquema: ${DB_USR}) ==="
                     def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
+                    def workspaceName = sh(script: "grep apex.102.workspace dist/utils/properties/test.properties | cut -d= -f2 | sed s/\\r//", returnStdout: true).trim()
+
                     sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
                     sh """
-                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" -e WORKSPACE_NAME="${workspaceName}" ${ORACLE_CONTAINER} bash -c '
                             cd ${BUILD_DIR}
                             echo "=== Preparando Configuración de Liquibase ==="
                             # Convertir propiedades a formato liquibase.properties
@@ -84,10 +86,8 @@ pipeline {
                             echo "WHENEVER OSERROR EXIT FAILURE" >> deploy_script.sql
                             echo "project config set -name sqlcl.connectionName -value test" >> deploy_script.sql
                             
-                            echo "=== Redefiniendo Workspace destino ==="
-                            # Usamos sed para extraer y limpiar sin comillas que rompan el bash -c
-                            WORKSPACE_NAME=\$(grep apex.102.workspace dist/utils/properties/test.properties | cut -d= -f2 | sed s/\\\\r//)
-                            echo "BEGIN APEX_APPLICATION_INSTALL.SET_WORKSPACE('\${WORKSPACE_NAME}'); END;" >> deploy_script.sql
+                            echo "=== Redefiniendo Workspace destino: \$WORKSPACE_NAME ==="
+                            echo "BEGIN APEX_APPLICATION_INSTALL.SET_WORKSPACE(\"'\$WORKSPACE_NAME'\"); END;" >> deploy_script.sql
                             echo "/" >> deploy_script.sql
 
                             echo "project deploy -file /tmp/deploy_app.zip" >> deploy_script.sql
