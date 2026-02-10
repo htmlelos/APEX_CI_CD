@@ -80,18 +80,22 @@ pipeline {
                             # Asegurar que estamos en una rama local (evitar detached HEAD)
                             git checkout -B build_branch
 
-                            echo "=== Generando Artefacto con SQLcl ==="
-                            # Extraer flags -D para Liquibase (Limpia CRLF y colapsa a una línea)
-                            D_FLAGS=\$(sed "s/\\r//" dist/utils/properties/desa.properties | grep "=" | sed "s/^/-D/" | xargs)
-                            echo "Usando parámetros: \$D_FLAGS"
-                            ${SQLCL_PATH} \$D_FLAGS "\$DB_USR"/"$DB_PSW"@${DB_CONN_STR} <<EOF
-                            WHENEVER SQLERROR EXIT SQL.SQLCODE
-                            WHENEVER OSERROR EXIT FAILURE
-                            define DEFAULTS_FILE="dist/utils/properties/desa.properties"
-                            project stage
-                            project gen-artifact -name app-desa -version ${BUILD_NUMBER}
-                            exit
+                            echo "=== Generando Artefacto Portable con SQLcl ==="
+                            ${SQLCL_PATH} "\$DB_USR"/"$DB_PSW"@${DB_CONN_STR} <<EOF
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+define DEFAULTS_FILE="dist/utils/properties/desa.properties"
+project stage
+project gen-artifact -name app-desa -version ${BUILD_NUMBER}
+exit
 EOF
+
+                            echo "=== Validando Artefacto Portable ==="
+                            if unzip -p artifact/app-desa-${BUILD_NUMBER}.zip | grep -q "set_security_group_id"; then
+                                echo "!!! ERROR: El artefacto NO es portable (contiene workspace binding) !!!"
+                                exit 1
+                            fi
+                            echo "✓ Artefacto validado como portable (Environment Neutral)"
                         '
                     """
                     sh "mkdir -p artifact && docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
