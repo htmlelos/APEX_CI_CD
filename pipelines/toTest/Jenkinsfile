@@ -78,7 +78,6 @@ pipeline {
                             ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT FAILURE
-define PROJECT_ROOT="${BUILD_DIR}"
 define DEFAULTS_FILE="${BUILD_DIR}/liquibase.properties"
 project config set -name sqlcl.connectionName -value test
 project deploy -file /tmp/deploy_app.zip
