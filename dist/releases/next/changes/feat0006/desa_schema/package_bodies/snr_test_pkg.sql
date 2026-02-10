@@ -2,7 +2,7 @@
 -- changeset DESA_SCHEMA:1770160880739 stripComments:false  logicalFilePath:feat0006\desa_schema\package_bodies\snr_test_pkg.sql
 -- sqlcl_snapshot src/database/desa_schema/package_bodies/snr_test_pkg.sql:null:e9142953d4aad8c1248c3161dd916bb32b39b774:create
 
-create or replace package body desa_schema.snr_test_pkg as
+create or replace package body snr_test_pkg as
 
     function get_users return snr_users%rowtype as
         cursor cr_data is
