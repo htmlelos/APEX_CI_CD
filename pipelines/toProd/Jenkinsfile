@@ -91,7 +91,13 @@ pipeline {
 
                     echo "=== Validando Artefacto Portable ==="
                     sh """
-                        if unzip -p ${artifactFile} | grep -q "set_security_group_id"; then
+                        echo "Verificando archivos APEX en el artefacto..."
+                        if unzip -l ${artifactFile} | grep -q "f102.sql"; then
+                            if unzip -p ${artifactFile} "*/f102.sql" | grep -q "set_security_group_id"; then
+                                echo "!!! ERROR: El artefacto NO es portable (f102.sql contiene workspace binding) !!!"
+                                exit 1
+                            fi
+                        elif unzip -p ${artifactFile} | grep -q "set_security_group_id"; then
                             echo "!!! ERROR: El artefacto NO es portable (contiene workspace binding) !!!"
                             exit 1
                         fi
