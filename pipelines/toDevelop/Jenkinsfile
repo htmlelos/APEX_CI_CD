@@ -124,7 +124,7 @@ EOF
 
                             # Contar ocurrencias de cada patrón
                             PORTABLE_COUNT=\$(grep -c "wwv_flow_security.g_security_group_id" /tmp/f102_validation.sql || echo 0)
-                            HARDCODED_COUNT=\$(grep -cE "set_security_group_id\(p_security_group_id=>[0-9]{15,}\)" /tmp/f102_validation.sql || echo 0)
+                            HARDCODED_COUNT=\$(grep -cE "set_security_group_id[(]p_security_group_id=>[0-9]{15,}[)]" /tmp/f102_validation.sql || echo 0)
 
                             echo ""
                             echo "=== Análisis de Portabilidad ==="
@@ -136,7 +136,7 @@ EOF
                             if [ "\$HARDCODED_COUNT" -gt 0 ]; then
                                 echo "!!! ERROR CRÍTICO: Artefacto NO portable - contiene \$HARDCODED_COUNT workspace ID(s) hardcodeado(s) !!!"
                                 echo "--- Líneas problemáticas ---"
-                                grep -E "set_security_group_id\(p_security_group_id=>[0-9]{15,}\)" /tmp/f102_validation.sql | head -5
+                                grep -E "set_security_group_id[(]p_security_group_id=>[0-9]{15,}[)]" /tmp/f102_validation.sql | head -5
                                 rm /tmp/f102_validation.sql
                                 exit 1
                             elif [ "\$PORTABLE_COUNT" -gt 0 ]; then
