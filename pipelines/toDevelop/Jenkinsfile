@@ -84,13 +84,21 @@ pipeline {
                             ${SQLCL_PATH} "\$DB_USR"/"$DB_PSW"@${DB_CONN_STR} <<EOF
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT FAILURE
+SET SERVEROUTPUT ON
 
--- CRÍTICO: Establecer workspace ID a NULL antes de exportar
+-- CRÍTICO: Limpiar y establecer workspace ID a NULL antes de exportar
 -- Esto fuerza a APEX a generar código portable
 BEGIN
+    DBMS_OUTPUT.PUT_LINE('=== Configurando generación de artefacto portable ===');
+    APEX_APPLICATION_INSTALL.CLEAR_ALL;
     APEX_APPLICATION_INSTALL.SET_WORKSPACE_ID(NULL);
     APEX_APPLICATION_INSTALL.GENERATE_APPLICATION_ID;
     COMMIT;
+    DBMS_OUTPUT.PUT_LINE('=== Workspace ID configurado a NULL - Artefacto será portable ===');
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('!!! ERROR en configuración: ' || SQLERRM);
+        RAISE;
 END;
 /
 
@@ -105,20 +113,43 @@ EOF
                             unzip -p artifact/app-desa-${BUILD_NUMBER}.zip */f102.sql > /tmp/f102_validation.sql 2>/dev/null || \
                             unzip -p artifact/app-desa-${BUILD_NUMBER}.zip f102.sql > /tmp/f102_validation.sql 2>/dev/null
 
-                            # Mostrar las primeras líneas con set_security_group_id para debugging
-                            echo "--- Contenido de set_security_group_id en el artefacto ---"
-                            grep -A1 "set_security_group_id" /tmp/f102_validation.sql | head -10
+                            if [ ! -s /tmp/f102_validation.sql ]; then
+                                echo "!!! ERROR: No se pudo extraer f102.sql del artefacto !!!"
+                                exit 1
+                            fi
 
-                            # Validar que usa variable dinámica (PORTABLE)
-                            if grep -q "wwv_flow_security.g_security_group_id" /tmp/f102_validation.sql; then
-                                echo "✓ Artefacto validado como PORTABLE (usa g_security_group_id)"
-                            elif grep -qE "set_security_group_id\\(p_security_group_id=>[0-9]{15,}\\)" /tmp/f102_validation.sql; then
-                                echo "!!! ERROR: Artefacto NO portable - contiene workspace ID hardcodeado !!!"
-                                grep "set_security_group_id" /tmp/f102_validation.sql | head -3
+                            # Mostrar TODAS las líneas con set_security_group_id para debugging completo
+                            echo "--- Contenido de set_security_group_id en el artefacto (primeras 15 líneas) ---"
+                            grep -n "set_security_group_id" /tmp/f102_validation.sql | head -15
+
+                            # Contar ocurrencias de cada patrón
+                            PORTABLE_COUNT=\$(grep -c "wwv_flow_security.g_security_group_id" /tmp/f102_validation.sql || echo 0)
+                            HARDCODED_COUNT=\$(grep -cE "set_security_group_id\(p_security_group_id=>[0-9]{15,}\)" /tmp/f102_validation.sql || echo 0)
+
+                            echo ""
+                            echo "=== Análisis de Portabilidad ==="
+                            echo "Ocurrencias de g_security_group_id (PORTABLE): \$PORTABLE_COUNT"
+                            echo "Ocurrencias de workspace ID hardcodeado (NO PORTABLE): \$HARDCODED_COUNT"
+                            echo ""
+
+                            # Validación estricta
+                            if [ "\$HARDCODED_COUNT" -gt 0 ]; then
+                                echo "!!! ERROR CRÍTICO: Artefacto NO portable - contiene \$HARDCODED_COUNT workspace ID(s) hardcodeado(s) !!!"
+                                echo "--- Líneas problemáticas ---"
+                                grep -E "set_security_group_id\(p_security_group_id=>[0-9]{15,}\)" /tmp/f102_validation.sql | head -5
                                 rm /tmp/f102_validation.sql
                                 exit 1
+                            elif [ "\$PORTABLE_COUNT" -gt 0 ]; then
+                                echo "✓✓✓ Artefacto validado como PORTABLE ✓✓✓"
+                                echo "✓ Usa wwv_flow_security.g_security_group_id (variable de sesión)"
+                                echo "✓ Se adaptará automáticamente al workspace de destino"
                             else
-                                echo "⚠ ADVERTENCIA: No se pudo validar portabilidad - revisar manualmente"
+                                echo "⚠⚠⚠ ADVERTENCIA: No se encontró ningún patrón conocido ⚠⚠⚠"
+                                echo "Revisar manualmente el artefacto antes de desplegar"
+                                echo "--- Primeras 20 líneas del archivo ---"
+                                head -20 /tmp/f102_validation.sql
+                                rm /tmp/f102_validation.sql
+                                exit 1
                             fi
                             rm -f /tmp/f102_validation.sql
                         '
