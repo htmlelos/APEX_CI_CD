@@ -106,10 +106,10 @@ pipeline {
 
                     echo "=== Ejecutando Despliegue con SQLcl ==="
                     sh """
-                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_CRED_PSW" ${ORACLE_CONTAINER} bash -c '
                             cd ${BUILD_DIR}
                             
-                            ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
+                            ${SQLCL_PATH} "\$DB_USR"/"\$DB_CRED_PSW"@${DB_CONN_STR} <<EOF
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR EXIT FAILURE
 define DEFAULTS_FILE="${BUILD_DIR}/dist/utils/properties/prod.properties"
