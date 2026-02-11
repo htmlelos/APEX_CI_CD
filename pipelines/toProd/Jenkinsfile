@@ -6,7 +6,7 @@ pipeline {
     }
 
     options {
-        skipDefaultCheckout()
+
         timeout(time: 60, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20'))
     }
@@ -23,11 +23,7 @@ pipeline {
     }
 
     stages {
-        stage('Initialize') {
-            steps {
-                checkout scm
-            }
-        }
+
 
         stage('Obtain Latest Artifact from TEST') {
             steps {
@@ -50,17 +46,24 @@ pipeline {
             steps {
                 script {
                     echo "=== Ejecutando Playwright en ambiente de TEST antes de PROD ==="
-                    sh """
+                    
                         docker rm -f playwright-runner 2>/dev/null || true
-                        docker run --rm --name playwright-runner \\
-                            --net=host \\
-                            -v ${WORKSPACE}:/work \\
-                            -w /work \\
-                            -e APEX_TEST_URL=${APEX_TEST_URL} \\
-                            -e CI=true \\
-                            mcr.microsoft.com/playwright:v1.40.0-jammy \\
-                            /bin/bash -c "npm install && npx playwright test"
-                    """
+                        
+                        // Iniciar contenedor en background (detached) sin volumenes
+                        sh "docker run -d --name playwright-runner --net=host -w /work -e APEX_TEST_URL=${APEX_TEST_URL} -e CI=true mcr.microsoft.com/playwright:v1.40.0-jammy tail -f /dev/null"
+                        
+                        // Copiar workspace al contenedor
+                        sh "docker cp ${WORKSPACE}/. playwright-runner:/work/"
+                        
+                        // Ejecutar tests
+                        try {
+                            sh "docker exec playwright-runner /bin/bash -c 'npm install && npx playwright test'"
+                        } finally {
+                            // Copiar reporte de vuelta al workspace
+                            sh "docker cp playwright-runner:/work/playwright-report ."
+                            sh "docker rm -f playwright-runner"
+                        }
+                    
                 }
             }
             post {
