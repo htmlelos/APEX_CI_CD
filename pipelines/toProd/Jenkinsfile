@@ -18,7 +18,7 @@ pipeline {
         BUILD_DIR        = "/tmp/apex_project_prod"
         DB_USR           = "PROD_SCHEMA"
         REPO_URL         = "https://github.com/htmlelos/APEX_CI_CD.git"
-        APEX_TEST_URL    = "http://localhost:8181/ords/r/test_wrkspc_cicd/app-ci-cd"
+        APEX_TEST_URL    = "http://localhost:8181/ords/r/test_wrkspc_cicd/test_alias/login"
         MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
     }
 
