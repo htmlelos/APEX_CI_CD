@@ -1,23 +1,108 @@
 pipeline {
-    agent {
-        node {
-            label 'built-in'
-            // Evita colisiones definiendo una ruta fija y aislada
-            customWorkspace "/var/jenkins_home/workspace/web-app-feature-check"
-        }
+    agent any
+
+    triggers {
+        githubPush()
     }
+
+    options {
+        skipDefaultCheckout()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    environment {
+        ORACLE_CONTAINER = "oracle-db"
+        SQLCL_PATH       = "/opt/sqlcl/bin/sql"
+        DB_CONN_STR      = "localhost:1521/FREEPDB1"
+        BUILD_DIR        = "/tmp/apex_project_desa"
+        DB_USR           = "DESA_SCHEMA"
+        MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
+    }
+
     stages {
+        stage('Initialize') {
+            steps {
+                deleteDir()
+                checkout scm
+            }
+        }
+
         stage('Static Analysis') {
             steps {
                 script {
-                    def scannerHome = tool 'sonar-scanner'
-                    withSonarQubeEnv('sonarqube') {
-                        sh "${scannerHome}/bin/sonar-scanner \
-                        -Dsonar.projectKey=web-app-feature \
-                        -Dsonar.sources=."
+                    def scannerHome = tool 'SonarScanner'
+                    withSonarQubeEnv('SonarQube') {
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=web-app-feature \
+                            -Dsonar.projectName="APEX Project - DESA" \
+                            -Dsonar.sources=. \
+                            -Dsonar.inclusions=**/*.sql,**/*.pks,**/*.pkb,**/*.fnc,**/*.prc,**/*.trg \
+                            -Dsonar.exclusions=**/node_modules/**,**/target/**,**/artifact/**,dist/**,src/database/desa_schema/apex_apps/** \
+                            -Dsonar.plsql.file.suffixes=sql,pks,pkb,fnc,prc,trg \
+                            -Dsonar.sourceEncoding=UTF-8
+                        """
                     }
                 }
             }
+        }
+
+        stage('Generate Artifact') {
+            environment {
+                DB = credentials('apex-dev-credential')
+            }
+            steps {
+                script {
+                    echo "=== Preparando Workspace en Contenedor ==="
+                    sh """
+                        tar -cf /tmp/project_desa.tar -C ${WORKSPACE} .
+                        docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
+                        docker cp /tmp/project_desa.tar ${ORACLE_CONTAINER}:/tmp/
+                        docker exec -u root ${ORACLE_CONTAINER} bash -c "
+                            rm -rf ${BUILD_DIR}/* ${BUILD_DIR}/.* 2>/dev/null || true
+                            tar -xf /tmp/project_desa.tar -C ${BUILD_DIR}
+                            chown -R oracle: ${BUILD_DIR}
+                            git config --global --add safe.directory ${BUILD_DIR}
+                            cd ${BUILD_DIR}
+                            git fetch --all
+                            git checkout -B develop
+                            git branch main develop || true
+                            rm /tmp/project_desa.tar 2>/dev/null || true
+                        "
+                        rm /tmp/project_desa.tar
+                    """
+
+                    echo "=== Generando Artefacto con SQLcl ==="
+                    sh """
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
+                            cd ${BUILD_DIR}
+                            
+                            # Generar artefacto
+                            ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+
+-- Usar script externo para portabilidad
+@dist/utils/sql/set_portable_mode.sql
+
+define DEFAULTS_FILE="dist/utils/properties/desa.properties"
+project stage
+project gen-artifact -name app-desa -version ${BUILD_NUMBER}
+exit
+EOF
+                        '
+                    """
+                    sh "mkdir -p artifact && docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
+            sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} || true"
         }
     }
 }

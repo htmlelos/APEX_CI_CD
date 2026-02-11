@@ -1,15 +1,15 @@
 {
   "project": "APEX_CICD",
   "sqlcl": {
-    "connectionName": "desa_schema@127.0.0.1:1522/FREEPDB1",
+    "connectionName": "desa_schema@127.0.0.1:1521/FREEPDB1",
     "version": "25.4.1.0"
   },
   "connections": {
     "develop": {
       "schema": "DESA_SCHEMA",
       "workspace": "DESA_WRKSPC_CICD",
-      "applicationId": "102",
-      "applicationAlias": "DESA_ALIAS"
+      "appId": "102",
+      "alias": "DESA_ALIAS"
     },
     "test": {
       "schema": "TEST_SCHEMA",
@@ -40,7 +40,7 @@
       "collationClause": "NEVER",
       "constraints": true,
       "constraintsAsAlter": true,
-      "emitSchema": true,
+      "emitSchema": false,
       "force": true,
       "partitioning": false,
       "segmentAttributes": false,

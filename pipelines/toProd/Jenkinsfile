@@ -1,14 +1,25 @@
 pipeline {
     agent any
-    
+
+    triggers {
+        githubPush()
+    }
+
+    options {
+        skipDefaultCheckout()
+        timeout(time: 60, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
+
     environment {
         ORACLE_CONTAINER = "oracle-db"
         SQLCL_PATH       = "/opt/sqlcl/bin/sql"
         DB_CONN_STR      = "localhost:1521/FREEPDB1"
-        BUILD_DIR        = "/tmp/apex_project"
+        BUILD_DIR        = "/tmp/apex_project_prod"
         DB_USR           = "PROD_SCHEMA"
-        // URL de TEST para validación con Playwright
+        REPO_URL         = "https://github.com/htmlelos/APEX_CI_CD.git"
         APEX_TEST_URL    = "http://localhost:8181/ords/r/test_wrkspc_cicd/app-ci-cd"
+        MAIL_RECIPIENTS  = "sergiolucero73@gmail.com, slucero@runaid.com.ar"
     }
 
     stages {
@@ -19,39 +30,19 @@ pipeline {
             }
         }
 
-        stage('Generate Production Artifact') {
-            environment {
-                DB = credentials('apex-prod-credential')
-            }
+        stage('Obtain Latest Artifact from TEST') {
             steps {
                 script {
-                    echo "=== Generando Artefacto para PRODUCCIÓN ==="
-                    sh """
-                        tar -cf /tmp/project.tar -C ${WORKSPACE} .
-                        docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
-                        docker cp /tmp/project.tar ${ORACLE_CONTAINER}:/tmp/
-                        docker exec -u root ${ORACLE_CONTAINER} bash -c "
-                            rm -rf ${BUILD_DIR}/* ${BUILD_DIR}/.* 2>/dev/null || true
-                            tar -xf /tmp/project.tar -C ${BUILD_DIR}
-                            chown -R oracle: ${BUILD_DIR}
-                            rm /tmp/project.tar
-                        "
-                        rm /tmp/project.tar
-                    """
-
-                    sh """
-                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
-                            cd ${BUILD_DIR}
-                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
-                            WHENEVER SQLERROR EXIT SQL.SQLCODE
-                            WHENEVER OSERROR EXIT FAILURE
-                            project stage
-                            project gen-artifact -name app-prod -version ${BUILD_NUMBER}
-                            exit
-EOF
-                        "
-                    """
-                    sh "mkdir -p artifact && docker cp ${ORACLE_CONTAINER}:${BUILD_DIR}/artifact/. artifact/"
+                    echo "=== Obteniendo último artifact exitoso de TEST ==="
+                    sh "mkdir -p artifact"
+                    copyArtifacts(
+                        projectName: 'APEX-Deploy-TEST',
+                        selector: lastSuccessful(),
+                        filter: 'artifact/*.zip',
+                        target: 'artifact',
+                        flatten: true
+                    )
+                    sh "ls -la artifact/"
                 }
             }
         }
@@ -62,18 +53,21 @@ EOF
                     echo "=== Ejecutando Playwright en ambiente de TEST antes de PROD ==="
                     sh """
                         docker rm -f playwright-runner 2>/dev/null || true
-                        docker create --name playwright-runner -w /work -e APEX_TEST_URL=${APEX_TEST_URL} mcr.microsoft.com/playwright:v1.40.0-jammy /bin/bash -c "npm install && npx playwright test"
-                        docker cp . playwright-runner:/work
-                        docker start -a playwright-runner
-                        docker cp playwright-runner:/work/playwright-report . || true
-                        docker rm -f playwright-runner
+                        docker run --rm --name playwright-runner \\
+                            --net=host \\
+                            -v ${WORKSPACE}:/work \\
+                            -w /work \\
+                            -e APEX_TEST_URL=${APEX_TEST_URL} \\
+                            -e CI=true \\
+                            mcr.microsoft.com/playwright:v1.40.0-jammy \\
+                            /bin/bash -c "npm install && npx playwright test"
                     """
                 }
             }
             post {
                 always {
                     publishHTML([
-                        allowMissing: false,
+                        allowMissing: true,
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
                         reportDir: 'playwright-report',
@@ -92,28 +86,138 @@ EOF
                 script {
                     echo "=== Desplegando a PRODUCCIÓN (Esquema: ${DB_USR}) ==="
                     def artifactFile = sh(script: "ls artifact/*.zip | head -n 1", returnStdout: true).trim()
-                    sh "docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_app.zip"
+                    def workspaceName = sh(script: "grep '^apex.workspace=' dist/utils/properties/prod.properties | head -n1 | cut -d= -f2 | tr -d '\\r'", returnStdout: true).trim()
+                    
+                    echo "=== Debug: Workspace extraído (PROD) ==="
+                    echo "Valor: [${workspaceName}]"
+                    echo "Longitud: ${workspaceName.length()}"
+
+                    echo "=== Validando Artefacto Portable ==="
+                    sh """
+                        echo "Verificando archivos APEX en el artefacto..."
+                        if unzip -l ${artifactFile} | grep -q "f102.sql"; then
+                            if unzip -p ${artifactFile} "*/f102.sql" | grep -q "set_security_group_id"; then
+                                echo "!!! ERROR: El artefacto NO es portable (f102.sql contiene workspace binding) !!!"
+                                exit 1
+                            fi
+                        elif unzip -p ${artifactFile} | grep -q "set_security_group_id"; then
+                            echo "!!! ERROR: El artefacto NO es portable (contiene workspace binding) !!!"
+                            exit 1
+                        fi
+                        echo "✓ Artefacto validado como portable"
+                    """
+
+                    echo "=== Verificando Existencia del Workspace PROD: ${workspaceName} ==="
                     sh """
                         docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
-                            cd ${BUILD_DIR}
-                            ${SQLCL_PATH} \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
-                            WHENEVER SQLERROR EXIT SQL.SQLCODE
-                            WHENEVER OSERROR EXIT FAILURE
-                            project config set -name sqlcl.connectionName -value prod
-                            project deploy -file /tmp/deploy_app.zip
-                            exit
+                            ${SQLCL_PATH} -S \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
+                            SET TERMOUT OFF
+                            SET FEEDBACK OFF
+                            SET PAGESIZE 0
+                            SELECT 'EXISTE_WORKSPACE:' || workspace_id FROM apex_workspaces WHERE workspace = upper('${workspaceName}');
+                            EXIT
 EOF
+                        " | grep "EXISTE_WORKSPACE" || (echo "!!! ERROR: El workspace ${workspaceName} NO existe en el ambiente de PRODUCCION !!!"; exit 1)
+                    """
+
+
+                    echo "=== Desplegando con SQLcl (Workspace asignado via liquibase.properties) ==="
+                    sh """
+                        docker exec -u root ${ORACLE_CONTAINER} mkdir -p ${BUILD_DIR}
+                        docker cp ${artifactFile} ${ORACLE_CONTAINER}:/tmp/deploy_prod.zip
+                        
+                        tar --exclude=./artifact -cf /tmp/project_context.tar -C ${WORKSPACE} .
+                        docker cp /tmp/project_context.tar ${ORACLE_CONTAINER}:/tmp/
+                        docker exec -u root ${ORACLE_CONTAINER} bash -c "
+                            rm -rf ${BUILD_DIR}/* ${BUILD_DIR}/.* 2>/dev/null || true
+                            tar -xf /tmp/project_context.tar -C ${BUILD_DIR}
+                            cp -r ${BUILD_DIR}/dist/* ${BUILD_DIR}/
+                            chown -R oracle: ${BUILD_DIR}
+                            rm /tmp/project_context.tar
                         "
+                        rm /tmp/project_context.tar
+                        
+                        docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c '
+                            cd ${BUILD_DIR}
+                            
+                            echo "=== Generando liquibase.properties desde prod.properties ==="
+                            sed "s/\\\\r//" dist/utils/properties/prod.properties | grep "=" > liquibase.properties
+                            cat liquibase.properties
+
+                            echo "=== Ejecutando Despliegue con SQLcl en PROD ==="
+                             ${SQLCL_PATH} "\$DB_USR"/"\$DB_PSW"@${DB_CONN_STR} <<EOF | tee /tmp/sqlcl_deploy.log
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+WHENEVER OSERROR EXIT FAILURE
+define DEFAULTS_FILE="${BUILD_DIR}/liquibase.properties"
+project config set -name sqlcl.connectionName -value prod
+project deploy -file /tmp/deploy_prod.zip -verbose
+exit
+EOF
+
+                            
+                            if grep -qiE "ERROR:|Bad Filename|Usage:|not recognized|Failure|ORA-" /tmp/sqlcl_deploy.log; then
+                                echo "!!! ERROR DETECTADO EN EL DESPLIEGUE PROD !!!"
+                                exit 1
+                            fi
+                            echo "✓ Despliegue PROD completado exitosamente"
+                        '
                     """
                 }
             }
         }
+
+        stage('Verify Deployment') {
+            environment {
+                DB = credentials('apex-prod-credential')
+            }
+            steps {
+                sh """
+                    echo "=== Verificando Aplicación en PROD ==="
+                    docker exec -u oracle -e DB_USR="\$DB_USR" -e DB_PSW="\$DB_PSW" ${ORACLE_CONTAINER} bash -c "
+                        ${SQLCL_PATH} -S \"\$DB_USR\"/\"\$DB_PSW\"@${DB_CONN_STR} <<EOF
+                        SET PAGESIZE 50
+                        SET FEEDBACK OFF
+                        COLUMN application_id FORMAT 999999
+                        COLUMN alias FORMAT A20
+                        COLUMN workspace FORMAT A30
+
+                        SELECT application_id, alias, workspace 
+                        FROM apex_applications 
+                        WHERE workspace = 'PROD_WRKSPC_CICD';
+                        exit
+EOF
+                    "
+                """
+            }
+        }
     }
-    
+
     post {
+        success {
+            script {
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Success: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "¡ÉXITO! El despliegue automático en PRODUCCIÓN (#${env.BUILD_NUMBER}) fue exitoso tras pasar las pruebas Playwright.\n\nVer detalles en: ${env.BUILD_URL}"
+                } catch (Exception e) {
+                    echo "Error enviando correo: ${e.message}"
+                }
+            }
+        }
+        failure {
+            script {
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Failure: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "CRÍTICO: El despliegue automático en PRODUCCIÓN (#${env.BUILD_NUMBER}) ha fallado. Playwright o el despleguen han reportado errores.\n\nVer consola: ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "Error enviando correo de fallo: ${e.message}"
+                }
+            }
+        }
         always {
             archiveArtifacts artifacts: 'artifact/*.zip, playwright-report/**', allowEmptyArchive: true
-            sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} /tmp/deploy_app.zip || true"
+            sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} /tmp/deploy_prod.zip || true"
         }
     }
 }
