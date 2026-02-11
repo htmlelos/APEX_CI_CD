@@ -100,6 +100,28 @@ EOF
     }
     
     post {
+        success {
+            script {
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Success: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "¡ÉXITO! El despliegue en DESARROLLO (#${env.BUILD_NUMBER}) ha finalizado correctamente.\n\nVer detalles en: ${env.BUILD_URL}"
+                } catch (Exception e) {
+                    echo "Error enviando correo: ${e.message}"
+                }
+            }
+        }
+        failure {
+            script {
+                try {
+                    mail to: "${env.MAIL_RECIPIENTS}",
+                         subject: "Failure: Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                         body: "FALLO: El despliegue en DESARROLLO (#${env.BUILD_NUMBER}) ha fallado.\n\nVer consola: ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "Error enviando correo de fallo: ${e.message}"
+                }
+            }
+        }
         always {
             archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
             sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} || true"
