@@ -87,6 +87,7 @@ EOF
     
     post {
         always {
+            archiveArtifacts artifacts: 'artifact/*.zip', allowEmptyArchive: true
             sh "docker exec -u root ${ORACLE_CONTAINER} rm -rf ${BUILD_DIR} || true"
         }
     }
