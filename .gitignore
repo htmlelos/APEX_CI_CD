@@ -10,3 +10,4 @@ var/*
 !/dist/utils/
 !/dist/install.sql
 !/dist/releases/
+node_modules
