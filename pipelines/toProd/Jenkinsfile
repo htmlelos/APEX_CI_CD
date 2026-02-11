@@ -142,7 +142,7 @@ EOF
 
                         SELECT application_id, alias, workspace 
                         FROM apex_applications 
-                        WHERE workspace = 'PROD_WRKSPC_CICD';
+                        WHERE workspace = '\\''PROD_WRKSPC_CICD'\\'';
                         exit
 EOF
                     '
