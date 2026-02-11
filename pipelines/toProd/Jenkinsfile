@@ -80,6 +80,20 @@ pipeline {
             }
         }
 
+        stage('Debug Credentials') {
+            environment {
+                DB_CRED = credentials('apex-prod-credential')
+            }
+            steps {
+                script {
+                    echo "=== Debug Variables de Entorno y Credenciales ==="
+                    echo "Global DB_USR (should be PROD_SCHEMA): ${DB_USR}"
+                    echo "Credential User (DB_CRED_USR): ${env.DB_CRED_USR}"
+                    echo "Credential Password Exists? (DB_CRED_PSW): ${env.DB_CRED_PSW ? 'YES' : 'NO'}"
+                }
+            }
+        }
+
         stage('Deploy to PRODUCTION') {
             environment {
                 DB_CRED = credentials('apex-prod-credential')
