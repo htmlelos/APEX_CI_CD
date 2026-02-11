@@ -47,7 +47,7 @@ pipeline {
                 script {
                     echo "=== Ejecutando Playwright en ambiente de TEST antes de PROD ==="
                     
-                        docker rm -f playwright-runner 2>/dev/null || true
+                        sh "docker rm -f playwright-runner 2>/dev/null || true"
                         
                         // Iniciar contenedor en background (detached) sin volumenes
                         sh "docker run -d --name playwright-runner --net=host -w /work -e APEX_TEST_URL=${APEX_TEST_URL} -e CI=true mcr.microsoft.com/playwright:v1.40.0-jammy tail -f /dev/null"
